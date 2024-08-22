@@ -25,15 +25,26 @@ use std::time::{Duration, Instant};
 /// Designed mostly to be used as a fixed resolution "virtual pixel buffer", but the SDL canvas is
 /// available as one of its fields and can be directly manipulated.
 pub struct App {
-    /// Set to true to quit App on the next update
+    /// Set to true to quit App on the next update.
     pub quit_requested: bool,
-    /// Tiny struct that contains the state of a virtual Gamepad
+    /// Tiny struct that contains the state of a virtual Gamepad.
     pub gamepad: GamePad,
     /// Minimum sleep time when limiting fps. The smaller it is, the more accurate it will be,
     /// but some platforms (Windows...) seem to struggle with that.
     pub idle_increments_microsecs: u64,
-    pub smooth_elapsed_time:bool,
-    pub print_fps:bool,
+    /// Performs quantization on the elapsed time, rounding it to the nearest most like display
+    /// frequency (i.e 60Hz, 72Hz, 90Hz, 120Hz, etc.). This allows for smooth, predictable delta-timing,
+    /// especially in pixel art games where precise 1Px increments per frame are common.
+    pub smooth_elapsed_time: bool,
+    /// Prints every second to the terminal the current FPS value.
+    pub print_fps_interval: Option<f32>,
+    // SDL
+    /// The internal SDL canvas. It is automatically cleared on every frame start.
+    pub canvas: Canvas<Window>,
+    /// The internal SDL texture creator associated with the canvas.
+    pub texture_creator: TextureCreator<WindowContext>,
+    context: Sdl,
+    render_texture: Texture,
     // Video
     width: u32,
     height: u32,
@@ -45,17 +56,9 @@ pub struct App {
     frame_start: Instant,
     update_time: f64,  // Elapsed time before presenting the canvas
     elapsed_time: f64, // Whole frame time at current FPS
-    // SDL
-    context: Sdl,
-    render_texture: Texture,
-    /// The internal SDL canvas. It is automatically cleared on every frame start.
-    pub canvas: Canvas<Window>,
-    /// The internal SDL texture creator associated with the canvas.
-    pub texture_creator: TextureCreator<WindowContext>,
 }
 
 impl App {
-
     /// Returns a new App with a fixed size pixel buffer.
     pub fn new(
         name: &str,
@@ -64,7 +67,6 @@ impl App {
         timing: Timing,
         scaling: Scaling,
     ) -> Result<Self, String> {
-        // SDL Init
         let context = sdl2::init()?;
         let video_subsystem = context.video()?;
         let window = video_subsystem
@@ -77,17 +79,12 @@ impl App {
 
         let canvas = match timing {
             Timing::Vsync | Timing::VsyncLimitFPS(_) => {
-                window
-                .into_canvas()
-                .accelerated()
-                .present_vsync()
-            },
-            Timing::Immediate | Timing::ImmediateLimitFPS(_) => {
-                window
-                .into_canvas()
-                .accelerated()
+                window.into_canvas().accelerated().present_vsync()
             }
-        }.build().map_err(|e| e.to_string())?;
+            Timing::Immediate | Timing::ImmediateLimitFPS(_) => window.into_canvas().accelerated(),
+        }
+        .build()
+        .map_err(|e| e.to_string())?;
 
         use sdl2::sys::SDL_WindowFlags::*;
         let dpi_mult = if (canvas.window().window_flags() & SDL_WINDOW_ALLOW_HIGHDPI as u32) != 0 {
@@ -112,7 +109,7 @@ impl App {
             gamepad: GamePad::new(),
             idle_increments_microsecs: 100,
             smooth_elapsed_time: true,
-            print_fps: false,
+            print_fps_interval: None,
             last_second: Instant::now(),
             frame_start: Instant::now(),
             update_time: 0.0,
@@ -139,7 +136,7 @@ impl App {
     /// updates self.gamepad with the current values.
     pub fn start_frame(&mut self) -> Result<(), String> {
         // Whole frame time. Quantized to a minimum interval
-        self.elapsed_time =self.frame_start.elapsed().as_secs_f64();
+        self.elapsed_time = self.frame_start.elapsed().as_secs_f64();
         if self.smooth_elapsed_time {
             self.elapsed_time = quantize(
                 self.elapsed_time,
@@ -150,9 +147,11 @@ impl App {
         self.frame_start = Instant::now();
 
         // Detects new second, prints FPS
-        if self.last_second.elapsed().as_millis() > 1000 && self.print_fps {
-            self.last_second = Instant::now();
-            println!("FPS: {:.1}", (1.0 / self.elapsed_time));
+        if let Some(interval) = self.print_fps_interval {
+            if self.last_second.elapsed().as_secs_f32() > interval {
+                self.last_second = Instant::now();
+                println!("FPS: {:.1}", (1.0 / self.elapsed_time));
+            }
         }
 
         self.gamepad.set_previous_state();
@@ -216,9 +215,8 @@ impl App {
         Ok(())
     }
 
-
     /// Presents the current pixel buffer respecting the scaling strategy.
-    pub fn present_pixel_buffer(&mut self)-> Result<(), String> {
+    pub fn present_pixel_buffer(&mut self) -> Result<(), String> {
         let rect = match self.scaling {
             Scaling::Integer | Scaling::PreserveAspect => {
                 let window_size = self.canvas.window().size();
@@ -245,9 +243,9 @@ impl App {
         Ok(())
     }
 
-
     /// Required to be called at the end of a frame loop. Presents the canvas and performs an idle wait
-    /// if frame rate limiting is the current timing strategy.
+    /// if frame rate limiting is required. Ironically, performing this idle loop may *lower* the CPU
+    /// use in some platforms, compared to pure VSync!
     pub fn finish_frame(&mut self) -> Result<(), String> {
         self.update_time = self
             .frame_start
@@ -284,6 +282,7 @@ impl App {
     }
 }
 
+#[inline(always)]
 fn quantize(value: f64, size: f64) -> f64 {
     (value / size).round() * size
 }

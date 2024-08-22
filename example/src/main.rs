@@ -12,7 +12,7 @@ fn main() -> Result<(), String> {
         Scaling::PreserveAspect,
     )?;
 
-    app.print_fps = true;
+    app.print_fps_interval = Some(1.0);
 
     while !app.quit_requested {
         app.start_frame()?;

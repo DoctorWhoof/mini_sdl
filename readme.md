@@ -4,13 +4,14 @@ This is an early publish of a work-in-progress crate. Use with discretion.
 
 Designed primarily to provide raw access to an RGB pixel buffer and display its contents correctly, with timing options like Vsync and frame rate limiting, and scaling options like Aspect Ratio and integer scaling.
 
-I decided to make this crate after spending an entire weekend testing multiple other libraries that could potentially perform this task, but failed to either perform well or present the frames with proper frame pacing. SDL2 was the only high-level library that satisfied all requirements, but turned out to be the most complex to use!
+I decided to make this crate after spending an entire weekend testing multiple libraries that could potentially perform this task, but failed to either perform well or present the frames with proper frame pacing. SDL2 was the only high-level library that satisfied all requirements, but turned out to be the most complex to use, so wrapping it in something much simpler can be of value to many people who just want a "framebuffer" to write pixels to.
 
 The main goal is to favor simplicity over features. With that said, it will expand in the future, providing access to other basic SDL2 features like sound.
 
 *Warning*: Some SDL2 internals are exposed as public members, but this kind of access is *untested*.
 
 ## Example
+This example can be run invoking `cargo run -p example` from a terminal at the root of the crate.
 
 ```rust
 use mini_sdl::*;
@@ -24,7 +25,7 @@ fn main() -> Result<(), String> {
         Scaling::PreserveAspect,
     )?;
 
-    app.print_fps = true;
+    app.print_fps_interval = Some(1.0);
 
     while !app.quit_requested {
         app.start_frame()?;
