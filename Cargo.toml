@@ -4,6 +4,7 @@ version = "0.1.6"
 edition = "2021"
 description = "A small and simple wrapper around SDL2"
 license = "MIT"
+repository = "https://github.com/DoctorWhoof/mini_sdl.git"
 
 [dependencies.sdl2]
 version = "0.37.0"
