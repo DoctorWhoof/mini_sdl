@@ -28,9 +28,9 @@ fn main() -> Result<(), String> {
 
     while !app.quit_requested {
         app.start_frame()?;
-        // When calling update_pixels, "buffer" receives access to the
-        // render_target pixels in RGB format.
-        // "_pitch"", not used here, is the length in bytes of a row of pixels
+        // When calling update_pixels, "buffer" receives access
+        // to the render_target pixels in RGB format.
+        // _pitch, not used here, is how many bytes per row.
         app.update_pixels(
             |buffer: &mut [u8], _pitch: usize| {
                 let mut i = 0;
