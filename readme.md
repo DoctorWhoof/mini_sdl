@@ -12,7 +12,7 @@ The main goal is to favor simplicity over features. With that said, it will expa
 
 ## Example
 
-```
+```rust
 use mini_sdl::*;
 
 fn main() -> Result<(), String> {
