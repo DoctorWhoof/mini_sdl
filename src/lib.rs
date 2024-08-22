@@ -1,54 +1,74 @@
+#![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/readme.md"))]
+
 mod gamepad;
 mod scaling;
 mod timing;
+
 pub use gamepad::{Button, GamePad};
 pub use scaling::Scaling;
 pub use timing::Timing;
+
+pub use sdl2;
 
 use sdl2::{
     event::Event,
     keyboard::Keycode,
     pixels::PixelFormatEnum,
     rect::Rect,
-    render::{Canvas, Texture, TextureAccess},
-    video::Window,
-    EventPump,
+    render::{Canvas, Texture, TextureAccess, TextureCreator},
+    video::{Window, WindowContext},
+    Sdl,
 };
 use std::time::{Duration, Instant};
 
+/// A struct that provides SDL initialization and stores the SDL context and its associated data.
+/// Designed mostly to be used as a fixed resolution "virtual pixel buffer", but the SDL canvas is
+/// available as one of its fields and can be directly manipulated.
 pub struct App {
-    // State
+    /// Set to true to quit App on the next update
     pub quit_requested: bool,
+    /// Tiny struct that contains the state of a virtual Gamepad
     pub gamepad: GamePad,
-    request_update: bool,
-
+    /// Minimum sleep time when limiting fps. The smaller it is, the more accurate it will be,
+    /// but some platforms (Windows...) seem to struggle with that.
+    pub idle_increments_microsecs: u64,
+    pub smooth_elapsed_time:bool,
+    pub print_fps:bool,
     // Video
     width: u32,
     height: u32,
     dpi_mult: f32,
     timing: Timing,
     scaling: Scaling,
-
     // Timing,
-    partial_time: Instant,
-    frame_instant: Instant,
-    update_start: Instant,
-    update_time: f64,  // Time the last update took
+    last_second: Instant,
+    frame_start: Instant,
+    update_time: f64,  // Elapsed time before presenting the canvas
     elapsed_time: f64, // Whole frame time at current FPS
-
     // SDL
-    event_pump: EventPump,
-    canvas: Canvas<Window>,
-    texture: Texture,
+    context: Sdl,
+    render_texture: Texture,
+    /// The internal SDL canvas. It is automatically cleared on every frame start.
+    pub canvas: Canvas<Window>,
+    /// The internal SDL texture creator associated with the canvas.
+    pub texture_creator: TextureCreator<WindowContext>,
 }
 
 impl App {
-    pub fn new(width: u32, height: u32, timing: Timing, scaling: Scaling) -> Result<Self, String> {
+
+    /// Returns a new App with a fixed size pixel buffer.
+    pub fn new(
+        name: &str,
+        width: u32,
+        height: u32,
+        timing: Timing,
+        scaling: Scaling,
+    ) -> Result<Self, String> {
         // SDL Init
-        let sdl_context = sdl2::init()?;
-        let video_subsystem = sdl_context.video()?;
+        let context = sdl2::init()?;
+        let video_subsystem = context.video()?;
         let window = video_subsystem
-            .window("sdl spy", width * 2, height * 2)
+            .window(name, width * 2, height * 2)
             .allow_highdpi()
             .position_centered()
             .resizable()
@@ -56,18 +76,18 @@ impl App {
             .map_err(|e| e.to_string())?;
 
         let canvas = match timing {
-            Timing::Vsync | Timing::VsyncLimitFPS(_) => window
+            Timing::Vsync | Timing::VsyncLimitFPS(_) => {
+                window
                 .into_canvas()
                 .accelerated()
                 .present_vsync()
-                .build()
-                .map_err(|e| e.to_string())?,
-            Timing::Immediate | Timing::ImmediateLimitFPS(_) => window
+            },
+            Timing::Immediate | Timing::ImmediateLimitFPS(_) => {
+                window
                 .into_canvas()
                 .accelerated()
-                .build()
-                .map_err(|e| e.to_string())?,
-        };
+            }
+        }.build().map_err(|e| e.to_string())?;
 
         use sdl2::sys::SDL_WindowFlags::*;
         let dpi_mult = if (canvas.window().window_flags() & SDL_WINDOW_ALLOW_HIGHDPI as u32) != 0 {
@@ -77,25 +97,24 @@ impl App {
         };
 
         let texture_creator = canvas.texture_creator();
-        let texture = texture_creator
+        let render_texture = texture_creator
             .create_texture(
                 Some(PixelFormatEnum::RGB24),
                 TextureAccess::Streaming,
-                width as u32,
-                height as u32,
+                width,
+                height,
             )
             .ok()
             .unwrap();
 
-        let event_pump = sdl_context.event_pump()?;
-
         Ok(Self {
             quit_requested: false,
-            request_update: true,
             gamepad: GamePad::new(),
-            partial_time: Instant::now(),
-            frame_instant: Instant::now(),
-            update_start: Instant::now(),
+            idle_increments_microsecs: 100,
+            smooth_elapsed_time: true,
+            print_fps: false,
+            last_second: Instant::now(),
+            frame_start: Instant::now(),
             update_time: 0.0,
             elapsed_time: 0.0,
             width,
@@ -104,49 +123,40 @@ impl App {
             timing,
             scaling,
             canvas,
-            texture,
-            event_pump,
+            render_texture,
+            context,
+            texture_creator,
         })
     }
 
-    pub fn update_requested(&self) -> bool {
-        self.request_update
+    /// The amount of time in seconds each frame takes to update and draw.
+    /// Necessary to correctly implement delta timing, if you wish to do so.
+    pub fn elapsed_time(&mut self) -> f64 {
+        self.elapsed_time
     }
 
-    pub fn start_frame(&mut self) {
-        // Whole frame time
-        self.elapsed_time = self.frame_instant.elapsed().as_secs_f64();
-        self.frame_instant = Instant::now();
+    /// Required at the start of a frame loop, performs basic timing math, clears the canvas and
+    /// updates self.gamepad with the current values.
+    pub fn start_frame(&mut self) -> Result<(), String> {
+        // Whole frame time. Quantized to a minimum interval
+        self.elapsed_time =self.frame_start.elapsed().as_secs_f64();
+        if self.smooth_elapsed_time {
+            self.elapsed_time = quantize(
+                self.elapsed_time,
+                1.0 / 360.0, // 3X 120Hz, 6X 60Hz
+            )
+        }
 
-        // Optional Frame skip
-        self.request_update = match self.timing {
-            Timing::VsyncLimitFPS(fps) | Timing::ImmediateLimitFPS(fps) => {
-                let mut idle_time = (1.0 / fps) - self.update_time;
-                if self.timing == Timing::VsyncLimitFPS(fps) {
-                    idle_time *= 0.9 // ensures update happens before next vsync
-                };
-                let elapsed = self.partial_time.elapsed().as_secs_f64();
-                if elapsed > idle_time {
-                    // if (elapsed - idle_time).abs() > 0.001 {
-                    // println!(
-                    //     "update:{:.2} ms, idle:{:.2} ms, elapsed:{:.2} ms, frame: {:.2} ms",
-                    //     update_time * 1000.0,
-                    //     idle_time * 1000.0,
-                    //     elapsed * 1000.0,
-                    //     frame_time * 1000.0
-                    // );
-                }
-                self.partial_time = Instant::now();
-                true
-            }
-            _ => true,
-        };
-        self.update_start = Instant::now();
-    }
+        self.frame_start = Instant::now();
 
-    pub fn process_gamepad(&mut self) {
+        // Detects new second, prints FPS
+        if self.last_second.elapsed().as_millis() > 1000 && self.print_fps {
+            self.last_second = Instant::now();
+            println!("FPS: {:.1}", (1.0 / self.elapsed_time));
+        }
+
         self.gamepad.set_previous_state();
-        for event in self.event_pump.poll_iter() {
+        for event in self.context.event_pump()?.poll_iter() {
             match event {
                 Event::Quit { .. } => self.quit_requested = true,
                 Event::KeyDown {
@@ -190,61 +200,90 @@ impl App {
                 _ => {}
             }
         }
+
+        self.canvas.clear();
+        Ok(())
     }
 
-    pub fn update_pixel_buffer<F, R>(&mut self, func: F)
+    /// Uses SDL's "texture.with_lock" function to access the pixel buffer as an RGB array.
+    pub fn update_pixels<F, R>(&mut self, func: F) -> Result<(), String>
     where
         F: FnOnce(&mut [u8], usize) -> R,
     {
-        if !self.request_update {
-            return;
+        if let Err(text) = self.render_texture.with_lock(None, func) {
+            return Err(text);
         }
-        if let Err(text) = self.texture.with_lock(None, func) {
-            println!("Error updating canvas texture: {}", text);
-        }
+        Ok(())
     }
 
-    pub fn finish_frame(&mut self) {
-        if self.request_update {
-            // Scaling math
-            let rect = match self.scaling {
-                Scaling::Integer | Scaling::PreserveAspect => {
-                    let window_size = self.canvas.window().size();
-                    let scale = match self.scaling {
-                        Scaling::Integer => (window_size.1 as f32 / self.height as f32).floor(),
-                        Scaling::PreserveAspect => window_size.1 as f32 / self.height as f32,
-                        _ => 1.0,
-                    };
-                    let new_width = self.width as f32 * scale;
-                    let new_height = self.height as f32 * scale;
-                    let gap_x = ((window_size.0 as f32 - new_width) * self.dpi_mult) / 2.0;
-                    let gap_y = ((window_size.1 as f32 - new_height) * self.dpi_mult) / 2.0;
-                    Some(Rect::new(
-                        gap_x as i32,
-                        gap_y as i32,
-                        (new_width * self.dpi_mult) as u32,
-                        (new_height * self.dpi_mult) as u32,
-                    ))
+
+    /// Presents the current pixel buffer respecting the scaling strategy.
+    pub fn present_pixel_buffer(&mut self)-> Result<(), String> {
+        let rect = match self.scaling {
+            Scaling::Integer | Scaling::PreserveAspect => {
+                let window_size = self.canvas.window().size();
+                let scale = match self.scaling {
+                    Scaling::Integer => (window_size.1 as f32 / self.height as f32).floor(),
+                    Scaling::PreserveAspect => window_size.1 as f32 / self.height as f32,
+                    _ => 1.0,
+                };
+                let new_width = self.width as f32 * scale;
+                let new_height = self.height as f32 * scale;
+                let gap_x = ((window_size.0 as f32 - new_width) * self.dpi_mult) / 2.0;
+                let gap_y = ((window_size.1 as f32 - new_height) * self.dpi_mult) / 2.0;
+                Some(Rect::new(
+                    gap_x as i32,
+                    gap_y as i32,
+                    (new_width * self.dpi_mult) as u32,
+                    (new_height * self.dpi_mult) as u32,
+                ))
+            }
+            Scaling::StretchToWindow => None,
+        };
+        self.canvas
+            .copy_ex(&self.render_texture, None, rect, 0.0, None, false, false)?;
+        Ok(())
+    }
+
+
+    /// Required to be called at the end of a frame loop. Presents the canvas and performs an idle wait
+    /// if frame rate limiting is the current timing strategy.
+    pub fn finish_frame(&mut self) -> Result<(), String> {
+        self.update_time = self
+            .frame_start
+            .elapsed()
+            .as_secs_f64()
+            .clamp(0.0, 1.0 / 30.0);
+
+        match self.timing {
+            // Optional FPS limiting
+            Timing::VsyncLimitFPS(fps) | Timing::ImmediateLimitFPS(fps) => {
+                let update_so_far = self.frame_start.elapsed().as_secs_f64();
+                let target_time = 1.0 / fps;
+                if update_so_far < target_time {
+                    // Ideal elapsed time to maintain frame rate
+                    let mut idle_time = target_time - update_so_far;
+                    // Adjust to increase odds idle loop ends before vsync
+                    if let Timing::VsyncLimitFPS(_) = self.timing {
+                        idle_time += 0.0001
+                    }
+                    // Idle loop, wait in small sleep increments until target idle time is reached
+                    let mut elapsed = self.frame_start.elapsed().as_secs_f64();
+                    while elapsed < idle_time {
+                        std::thread::sleep(Duration::from_micros(self.idle_increments_microsecs));
+                        elapsed = self.frame_start.elapsed().as_secs_f64();
+                    }
                 }
-                Scaling::StretchToWindow => None,
-            };
+            }
+            // Vsync or Immediate don't sleep
+            _ => {}
+        };
 
-            self.canvas.clear();
-
-            self.canvas
-                .copy_ex(&self.texture, None, rect, 0.0, None, false, false)
-                .unwrap();
-
-            self.update_time = self
-                .update_start
-                .elapsed()
-                .as_secs_f64()
-                .clamp(0.0, 1.0 / 30.0);
-
-            self.canvas.present();
-        } else {
-            // Minimum sleep. Render and Input aren't processed while frame is waiting
-            std::thread::sleep(Duration::from_micros(100));
-        }
+        self.canvas.present();
+        Ok(())
     }
+}
+
+fn quantize(value: f64, size: f64) -> f64 {
+    (value / size).round() * size
 }

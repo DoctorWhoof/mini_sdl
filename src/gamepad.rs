@@ -1,9 +1,14 @@
+/// A tiny (4 bytes) struct that contains the state of a "virtual gamepad".
+/// Currently mini_sdl simply maps keyboard keys to it, but in the future it
+/// will allow actual gamepads and control remapping.
+
 #[derive(Default, Debug, PartialEq, Clone, Copy)]
 pub struct GamePad{
     current:u16,
     previous:u16
 }
 
+/// A virtual gamepad button. Currently hard coded to keyboard keys, it will be mappable in the future.
 #[repr(u16)]
 #[derive(Clone, Copy, Debug)]
 pub enum Button {
@@ -48,35 +53,3 @@ impl GamePad {
         self.previous = self.current;
     }
 }
-
-
-// Old style, one getter/setter per bit
-// macro_rules! flag {
-//     ($getter_name:ident, $setter_name:ident, $bit:expr) => {
-//         impl GamePad {
-//             /// Getter method to check if the bit is set.
-//             pub fn $getter_name(&self) -> bool {
-//                 (self.0 & (1 << $bit)) != 0
-//             }
-
-//             /// Setter method to set or clear the bit.
-//             pub fn $setter_name(&mut self, value: bool) {
-//                 if value {
-//                     self.0 |= 1 << $bit;
-//                 } else {
-//                     self.0 &= !(1 << $bit);
-//                 }
-//             }
-//         }
-//     };
-// }
-// flag!(up, set_up, 0);
-// flag!(down, set_down, 1);
-// flag!(left, set_left, 2);
-// flag!(right, set_right, 3);
-// flag!(button_a, set_button_a, 4);
-// flag!(button_b, set_button_b, 5);
-// flag!(button_x, set_button_x, 6);
-// flag!(button_y, set_button_y, 7);
-// flag!(start, set_start, 8);
-// flag!(select, set_select, 9);
