@@ -1,4 +1,4 @@
-### A simple wrapper around SDL2.
+# A simple wrapper around SDL2.
 
 This is an early publish of a work-in-progress crate. Use with discretion.
 
