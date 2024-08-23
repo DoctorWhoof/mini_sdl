@@ -43,7 +43,8 @@ pub struct App {
     pub canvas: Canvas<Window>,
     /// The internal SDL texture creator associated with the canvas.
     pub texture_creator: TextureCreator<WindowContext>,
-    context: Sdl,
+    /// The internal SDL context.
+    pub context: Sdl,
     render_texture: Texture,
     // Video
     width: u32,

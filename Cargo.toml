@@ -1,6 +1,6 @@
 [package]
 name = "mini_sdl"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2021"
 description = "A small and simple wrapper around SDL2"
 license = "MIT"
