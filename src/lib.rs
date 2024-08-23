@@ -286,3 +286,23 @@ impl App {
 fn quantize(value: f64, size: f64) -> f64 {
     (value / size).round() * size
 }
+
+// CAn't figure out how to test with SDL! This doesn't work
+// #[cfg(test)]
+// mod tests {
+//     use super::*;
+
+//     #[test]
+//     fn create_window() {
+//         let mut app = App::new(
+//             "test",
+//             320,
+//             240,
+//             Timing::VsyncLimitFPS(60.0),
+//             Scaling::PreserveAspect,
+//         ).unwrap();
+//         app.start_frame().unwrap();
+//         app.present_pixel_buffer().unwrap();
+//         app.finish_frame().unwrap();
+//     }
+// }

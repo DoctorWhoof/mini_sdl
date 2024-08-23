@@ -2,6 +2,8 @@
 
 This is an early publish of a work-in-progress crate. Use with discretion.
 
+### This crate assumes you've already installed SDL2 on your system (i.e. 'brew install sdl2' on MacOS). It wil not run if SDL2 isn't found.
+
 Designed primarily to provide raw access to an RGB pixel buffer and display its contents correctly, with timing options like Vsync and frame rate limiting, and scaling options like Aspect Ratio and integer scaling.
 
 I decided to make this crate after spending an entire weekend testing multiple libraries that could potentially perform this task, but failed to either perform well or present the frames with proper frame pacing. SDL2 was the only high-level library that satisfied all requirements, but turned out to be the most complex to use, so wrapping it in something much simpler can be of value to many people who just want a "framebuffer" to write pixels to.
