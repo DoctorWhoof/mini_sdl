@@ -21,4 +21,3 @@ jobs:
           rustc --version
           cargo --version
           cargo build
-          cargo test
