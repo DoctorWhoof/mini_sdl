@@ -14,13 +14,11 @@ jobs:
         run: |
           sudo apt-get update -y -qq
           sudo apt-get install -y libsdl2-dev libsdl2-mixer-dev libsdl2-gfx-dev libsdl2-image-dev libsdl2-ttf-dev
-      - name: Build SDL2
+      - name: Build mini_sdl
         shell: bash
-        env:
-          CI_BUILD_FEATURES: "unsafe_textures"
-          RUST_TEST_THREADS: 1
         run: |
           set -xeuo pipefail
           rustc --version
           cargo --version
           cargo build
+          cargo test
