@@ -38,6 +38,9 @@ pub struct App {
     pub smooth_elapsed_time: bool,
     /// Prints every second to the terminal the current FPS value.
     pub print_fps_interval: Option<f32>,
+    /// Background color
+    pub bg_color: (u8,u8,u8,u8),
+    ///
     // SDL
     /// The internal SDL canvas. It is automatically cleared on every frame start.
     pub canvas: Canvas<Window>,
@@ -111,6 +114,7 @@ impl App {
             idle_increments_microsecs: 100,
             smooth_elapsed_time: true,
             print_fps_interval: None,
+            bg_color:(0,0,0,255),
             last_second: Instant::now(),
             frame_start: Instant::now(),
             update_time: 0.0,
@@ -175,6 +179,12 @@ impl App {
                         Some(Keycode::Z) => self.gamepad.set(Button::B, true),
                         Some(Keycode::S) => self.gamepad.set(Button::X, true),
                         Some(Keycode::A) => self.gamepad.set(Button::Y, true),
+                        Some(Keycode::NUM_1) => self.gamepad.set(Button::LeftTrigger, true),
+                        Some(Keycode::Q) => self.gamepad.set(Button::LeftShoulder, true),
+                        Some(Keycode::NUM_2) => self.gamepad.set(Button::RightTrigger, true),
+                        Some(Keycode::W) => self.gamepad.set(Button::RightShoulder, true),
+                        Some(Keycode::TAB) => self.gamepad.set(Button::Select, true),
+                        Some(Keycode::RETURN) => self.gamepad.set(Button::Select, true),
                         Some(_) => {} // ignore the rest
                     }
                 }
@@ -194,14 +204,21 @@ impl App {
                         Some(Keycode::Z) => self.gamepad.set(Button::B, false),
                         Some(Keycode::S) => self.gamepad.set(Button::X, false),
                         Some(Keycode::A) => self.gamepad.set(Button::Y, false),
+                        Some(Keycode::NUM_1) => self.gamepad.set(Button::LeftTrigger, false),
+                        Some(Keycode::Q) => self.gamepad.set(Button::LeftShoulder, false),
+                        Some(Keycode::NUM_2) => self.gamepad.set(Button::RightTrigger, false),
+                        Some(Keycode::W) => self.gamepad.set(Button::RightShoulder, false),
+                        Some(Keycode::TAB) => self.gamepad.set(Button::Select, false),
+                        Some(Keycode::RETURN) => self.gamepad.set(Button::Select, false),
                         Some(_) => {} // ignore the rest
                     }
                 }
                 _ => {}
             }
         }
-
+        self.canvas.set_draw_color(self.bg_color);
         self.canvas.clear();
+        self.canvas.set_draw_color((255,255,255,255));
         Ok(())
     }
 
