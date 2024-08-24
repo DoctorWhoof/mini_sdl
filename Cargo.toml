@@ -5,6 +5,7 @@ edition = "2021"
 description = "A small and simple wrapper around SDL2"
 license = "MIT"
 repository = "https://github.com/DoctorWhoof/mini_sdl.git"
+documentation = "https://docs.rs/mini_sdl/latest/mini_sdl/"
 
 [dependencies.sdl2]
 version = "0.37.0"
