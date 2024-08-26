@@ -56,6 +56,7 @@ pub struct App {
     timing: Timing,
     scaling: Scaling,
     // Timing,
+    app_time: Instant,
     last_second: Instant,
     frame_start: Instant,
     update_time: f64,  // Elapsed time before presenting the canvas
@@ -115,6 +116,7 @@ impl App {
             smooth_elapsed_time: true,
             print_fps_interval: None,
             bg_color:(0,0,0,255),
+            app_time: Instant::now(),
             last_second: Instant::now(),
             frame_start: Instant::now(),
             update_time: 0.0,
@@ -133,9 +135,16 @@ impl App {
 
     /// The amount of time in seconds each frame takes to update and draw.
     /// Necessary to correctly implement delta timing, if you wish to do so.
-    pub fn elapsed_time(&mut self) -> f64 {
+    pub fn elapsed_time(&self) -> f64 {
         self.elapsed_time
     }
+
+
+    /// Time in seconds since the start of the app
+    pub fn time(&self) -> f32 {
+        self.app_time.elapsed().as_secs_f32()
+    }
+
 
     /// Required at the start of a frame loop, performs basic timing math, clears the canvas and
     /// updates self.gamepad with the current values.
