@@ -42,7 +42,7 @@ pub struct App {
     /// frequency (i.e 60Hz, 72Hz, 90Hz, 120Hz, etc.). This allows for smooth, predictable delta-timing,
     /// especially in pixel art games where precise 1Px increments per frame are common.
     pub smooth_elapsed_time: bool,
-    /// Prints every second to the terminal the current FPS value.
+    /// Prints every f32 seconds to the terminal the current FPS value.
     pub print_fps_interval: Option<f32>,
     /// Background color
     pub bg_color: (u8, u8, u8, u8),
@@ -57,6 +57,9 @@ pub struct App {
     /// The SDL TTF context
     pub fonts: Sdl2TtfContext,
     /// The render target with the fixed resolution specified when creating the app.
+    /// This is slower than the pixel buffer if your goal is to draw pixel-by-pixel
+    /// (use 'update_pixels' for that) but can use regular SDL drawing functions via
+    /// "canvas.with_texture_canvas".
     pub render_target: Texture,
     render_texture: Texture,
     // Video
@@ -329,6 +332,9 @@ impl App {
         Ok(())
     }
 
+    /// Presents the render target to the canvas respecting the scaling strategy.
+    /// Warning: can be much slower than "present_pixel_buffer" if the goal is to simply
+    /// draw pixel-by-pixel.
     pub fn present_render_target(&mut self) -> Result<(), String> {
         let rect = self.get_scaled_rect();
         self.canvas

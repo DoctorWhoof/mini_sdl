@@ -11,12 +11,15 @@ use std::{collections::HashMap, path::Path};
 const CHARACTERS: &'static str =
     "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!@#$%^&*()-_=+,.:;'~? ";
 
+/// Pre-renders ASCII characters to a texture when created
+/// and can render lines of text to a canvas. Does not handle Unicode characters!
 pub struct FontAtlas {
     pub texture: Texture,
     pub color: Color,
     height: u16,
     rects: HashMap<char, Rect>,
 }
+
 
 impl FontAtlas {
     pub fn new(
