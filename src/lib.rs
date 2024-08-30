@@ -1,9 +1,11 @@
 #![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/readme.md"))]
 
+mod font_atlas;
 mod gamepad;
 mod scaling;
 mod timing;
 
+pub use font_atlas::FontAtlas;
 pub use gamepad::{Button, GamePad};
 pub use scaling::Scaling;
 pub use timing::Timing;
@@ -14,12 +16,16 @@ use sdl2::{
     event::Event,
     keyboard::Keycode,
     pixels::PixelFormatEnum,
-    rect::Rect,
+    rect::{Point, Rect},
     render::{Canvas, Texture, TextureAccess, TextureCreator},
+    ttf::Sdl2TtfContext,
     video::{Window, WindowContext},
     Sdl,
 };
-use std::time::{Duration, Instant};
+use std::{
+    path::Path,
+    time::{Duration, Instant},
+};
 
 /// A struct that provides SDL initialization and stores the SDL context and its associated data.
 /// Designed mostly to be used as a fixed resolution "virtual pixel buffer", but the SDL canvas is
@@ -39,7 +45,7 @@ pub struct App {
     /// Prints every second to the terminal the current FPS value.
     pub print_fps_interval: Option<f32>,
     /// Background color
-    pub bg_color: (u8,u8,u8,u8),
+    pub bg_color: (u8, u8, u8, u8),
     ///
     // SDL
     /// The internal SDL canvas. It is automatically cleared on every frame start.
@@ -48,6 +54,10 @@ pub struct App {
     pub texture_creator: TextureCreator<WindowContext>,
     /// The internal SDL context.
     pub context: Sdl,
+    /// The SDL TTF context
+    pub fonts: Sdl2TtfContext,
+    /// The render target with the fixed resolution specified when creating the app.
+    pub render_target: Texture,
     render_texture: Texture,
     // Video
     width: u32,
@@ -61,6 +71,16 @@ pub struct App {
     frame_start: Instant,
     update_time: f64,  // Elapsed time before presenting the canvas
     elapsed_time: f64, // Whole frame time at current FPS
+    // Overlay
+    /// Provides a default FontAtlas for the overlay.
+    pub default_font: Option<FontAtlas>,
+    /// Scales the distance from line to line.
+    pub overlay_line_spacing: f32,
+    /// Scales the rendering of the entire overlay text.
+    pub overlay_scale: f32,
+    /// Initial coordinates (left, top) of the overlay text.
+    pub overlay_coords: Point,
+    overlay: Vec<String>,
 }
 
 impl App {
@@ -109,13 +129,25 @@ impl App {
             .ok()
             .unwrap();
 
+        let render_target = texture_creator
+            .create_texture(
+                Some(PixelFormatEnum::RGB24),
+                TextureAccess::Target,
+                width,
+                height,
+            )
+            .ok()
+            .unwrap();
+
+        let fonts = sdl2::ttf::init().map_err(|e| e.to_string())?;
+
         Ok(Self {
             quit_requested: false,
             gamepad: GamePad::new(),
             idle_increments_microsecs: 100,
             smooth_elapsed_time: true,
             print_fps_interval: None,
-            bg_color:(0,0,0,255),
+            bg_color: (0, 0, 0, 255),
             app_time: Instant::now(),
             last_second: Instant::now(),
             frame_start: Instant::now(),
@@ -128,8 +160,15 @@ impl App {
             scaling,
             canvas,
             render_texture,
+            render_target,
             context,
             texture_creator,
+            fonts,
+            default_font: None,
+            overlay: Vec::with_capacity(100),
+            overlay_line_spacing: 1.0,
+            overlay_scale: 1.0,
+            overlay_coords: Point::new(16, 16),
         })
     }
 
@@ -139,12 +178,28 @@ impl App {
         self.elapsed_time
     }
 
+    /// The current frame rate.
+    pub fn fps(&self) -> f64 {
+        1.0 / self.elapsed_time
+    }
 
     /// Time in seconds since the start of the app
     pub fn time(&self) -> f32 {
         self.app_time.elapsed().as_secs_f32()
     }
 
+    /// Adds a line of text to the overlay. The overlay text is cleared on every frame.
+    pub fn overlay_push(&mut self, text: impl Into<String>) {
+        self.overlay.push(text.into());
+    }
+
+    /// Loads a new font
+    pub fn load_font<P>(&mut self, path: P, size: u16) -> Result<FontAtlas, String>
+    where
+        P: AsRef<Path>,
+    {
+        FontAtlas::new(path, size, &self.fonts, &mut self.texture_creator)
+    }
 
     /// Required at the start of a frame loop, performs basic timing math, clears the canvas and
     /// updates self.gamepad with the current values.
@@ -227,7 +282,7 @@ impl App {
         }
         self.canvas.set_draw_color(self.bg_color);
         self.canvas.clear();
-        self.canvas.set_draw_color((255,255,255,255));
+        self.canvas.set_draw_color((255, 255, 255, 255));
         Ok(())
     }
 
@@ -242,9 +297,8 @@ impl App {
         Ok(())
     }
 
-    /// Presents the current pixel buffer respecting the scaling strategy.
-    pub fn present_pixel_buffer(&mut self) -> Result<(), String> {
-        let rect = match self.scaling {
+    fn get_scaled_rect(&self) -> Option<Rect> {
+        match self.scaling {
             Scaling::Integer | Scaling::PreserveAspect => {
                 let window_size = self.canvas.window().size();
                 let scale = match self.scaling {
@@ -264,9 +318,21 @@ impl App {
                 ))
             }
             Scaling::StretchToWindow => None,
-        };
+        }
+    }
+
+    /// Presents the current pixel buffer respecting the scaling strategy.
+    pub fn present_pixel_buffer(&mut self) -> Result<(), String> {
+        let rect = self.get_scaled_rect();
         self.canvas
             .copy_ex(&self.render_texture, None, rect, 0.0, None, false, false)?;
+        Ok(())
+    }
+
+    pub fn present_render_target(&mut self) -> Result<(), String> {
+        let rect = self.get_scaled_rect();
+        self.canvas
+            .copy_ex(&self.render_target, None, rect, 0.0, None, false, false)?;
         Ok(())
     }
 
@@ -279,6 +345,24 @@ impl App {
             .elapsed()
             .as_secs_f64()
             .clamp(0.0, 1.0 / 30.0);
+
+        // Overlay
+        if let Some(font) = &mut self.default_font {
+            // self.canvas.set_draw_color((255, 255, 255, 255));
+            let mut y = self.overlay_coords.y;
+            for line in &self.overlay {
+                font.draw(
+                    line,
+                    self.overlay_coords.x,
+                    y,
+                    self.overlay_scale,
+                    &mut self.canvas,
+                )?;
+                let inc = (font.height() as f32 * self.overlay_line_spacing) * self.overlay_scale;
+                y += inc as i32;
+            }
+        }
+        self.overlay.clear();
 
         match self.timing {
             // Optional FPS limiting

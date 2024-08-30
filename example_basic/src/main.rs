@@ -1,5 +1,7 @@
 //! A minimal app using the mini_sdl crate. Simply draws an orange frame with
 //! fixed aspect ratio and vsync. The frame rate is printed every second.
+//! Uses the "update_pixels" and "present_pixel_buffer" methods and is much faster
+//! than drawing directly to the render_target using "canvas.with_texture".
 
 use mini_sdl::*;
 
@@ -18,7 +20,7 @@ fn main() -> Result<(), String> {
         app.start_frame()?;
         // When calling update_pixels, "buffer" receives access to the
         // render_target pixels in RGB format.
-        // "_pitch"", not used here, is the length in bytes of a row of pixels
+        // "_pitch"", not used here, is the length in bytes of a row of pixels.
         app.update_pixels(
             |buffer: &mut [u8], _pitch: usize| {
                 let mut i = 0;

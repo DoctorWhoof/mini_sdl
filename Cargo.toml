@@ -1,6 +1,6 @@
 [package]
 name = "mini_sdl"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 description = "A small and simple wrapper around SDL2"
 license = "MIT"
@@ -10,7 +10,7 @@ documentation = "https://docs.rs/mini_sdl/latest/mini_sdl/"
 [dependencies.sdl2]
 version = "0.37.0"
 default-features = false
-features = ["unsafe_textures"]
+features = ["unsafe_textures", "ttf"]
 
 [workspace]
-members = [ "example" ]
+members = [ "example_basic", "example_font" , "example_overlay"]
