@@ -12,6 +12,8 @@ pub use timing::Timing;
 
 pub use sdl2;
 
+const LOWER_ELAPSED_LIMIT:f64 = 1.0 / 360.0;     // 3X 120Hz, 6X 60Hz
+
 use sdl2::{
     event::Event,
     keyboard::Keycode,
@@ -212,8 +214,15 @@ impl App {
         if self.smooth_elapsed_time {
             self.elapsed_time = quantize(
                 self.elapsed_time,
-                1.0 / 360.0, // 3X 120Hz, 6X 60Hz
-            )
+                LOWER_ELAPSED_LIMIT,
+            );
+            match self.timing {
+                Timing::VsyncLimitFPS(limit) | Timing::ImmediateLimitFPS(limit) => {
+                    let fps_limit = 1.0 / limit;
+                    self.elapsed_time = self.elapsed_time.clamp(fps_limit, 1.0);
+                },
+                _ => {}
+            }
         }
 
         self.frame_start = Instant::now();
