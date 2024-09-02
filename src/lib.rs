@@ -1,20 +1,20 @@
 #![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/readme.md"))]
 
+mod audio;
 mod font_atlas;
 mod gamepad;
 mod scaling;
 mod timing;
 
+pub use sdl2;
+pub use audio::{StereoFrame, AudioInput};
 pub use font_atlas::FontAtlas;
 pub use gamepad::{Button, GamePad};
 pub use scaling::Scaling;
 pub use timing::Timing;
 
-pub use sdl2;
-
-const LOWER_ELAPSED_LIMIT:f64 = 1.0 / 360.0;     // 3X 120Hz, 6X 60Hz
-
 use sdl2::{
+    audio::{AudioDevice, AudioSpecDesired},
     event::Event,
     keyboard::Keycode,
     pixels::PixelFormatEnum,
@@ -28,6 +28,8 @@ use std::{
     path::Path,
     time::{Duration, Instant},
 };
+
+const LOWER_ELAPSED_LIMIT: f64 = 1.0 / 360.0; // 3X 120Hz, 6X 60Hz
 
 /// A struct that provides SDL initialization and stores the SDL context and its associated data.
 /// Designed mostly to be used as a fixed resolution "virtual pixel buffer", but the SDL canvas is
@@ -86,6 +88,10 @@ pub struct App {
     /// Initial coordinates (left, top) of the overlay text.
     pub overlay_coords: Point,
     overlay: Vec<String>,
+    // Sound
+    pub audio_device: AudioDevice<AudioInput>,
+    mix_rate: i32,
+    // buffer: VecDeque<StereoFrame>,
 }
 
 impl App {
@@ -146,6 +152,19 @@ impl App {
 
         let fonts = sdl2::ttf::init().map_err(|e| e.to_string())?;
 
+        //Sound init
+        let mix_rate = 44100;
+        let desired_spec = AudioSpecDesired {
+            freq: Some(mix_rate as i32),
+            channels: Some(2),
+            samples: None, // default sample size
+        };
+        let audio_subsystem = context.audio()?;
+        let audio_device = audio_subsystem.open_playback(None, &desired_spec, |spec| {
+            println!("{:?}", spec);
+            AudioInput::new()
+        })?;
+
         Ok(Self {
             quit_requested: false,
             gamepad: GamePad::new(),
@@ -174,6 +193,8 @@ impl App {
             overlay_line_spacing: 1.0,
             overlay_scale: 1.0,
             overlay_coords: Point::new(16, 16),
+            mix_rate: 44100,
+            audio_device,
         })
     }
 
@@ -189,8 +210,8 @@ impl App {
     }
 
     /// Time in seconds since the start of the app
-    pub fn time(&self) -> f32 {
-        self.app_time.elapsed().as_secs_f32()
+    pub fn time(&self) -> f64 {
+        self.app_time.elapsed().as_secs_f64()
     }
 
     /// Adds a line of text to the overlay. The overlay text is cleared on every frame.
@@ -212,15 +233,12 @@ impl App {
         // Whole frame time. Quantized to a minimum interval
         self.elapsed_time = self.frame_start.elapsed().as_secs_f64();
         if self.smooth_elapsed_time {
-            self.elapsed_time = quantize(
-                self.elapsed_time,
-                LOWER_ELAPSED_LIMIT,
-            );
+            self.elapsed_time = quantize(self.elapsed_time, LOWER_ELAPSED_LIMIT);
             match self.timing {
                 Timing::VsyncLimitFPS(limit) | Timing::ImmediateLimitFPS(limit) => {
                     let fps_limit = 1.0 / limit;
                     self.elapsed_time = self.elapsed_time.clamp(fps_limit, 1.0);
-                },
+                }
                 _ => {}
             }
         }
@@ -406,11 +424,37 @@ impl App {
         self.canvas.present();
         Ok(())
     }
+
+    // Audio
+    pub fn start_audio(&mut self){
+        self.audio_device.resume();
+    }
+
+    pub fn pause_audio(&mut self){
+        self.audio_device.pause()
+    }
+
+    pub fn mix_rate(&self) -> i32 {
+        self.mix_rate
+    }
+
+    pub fn push_audio_samples(&mut self, samples:&[StereoFrame]) -> Result<(), String> {
+        let mut audio = self.audio_device.lock();
+        audio.push_samples(samples);
+        Ok(())
+    }
 }
 
 #[inline(always)]
+// Skips quantization if value is too tiny, useful when getting elapsed time in
+// immediate timing mode and very fast frame rates.
 fn quantize(value: f64, size: f64) -> f64 {
-    (value / size).round() * size
+    let result = (value / size).round() * size;
+    if result < f64::EPSILON {
+        value
+    } else {
+        result
+    }
 }
 
 // CAn't figure out how to test with SDL! This doesn't work

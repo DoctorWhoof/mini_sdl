@@ -13,4 +13,10 @@ default-features = false
 features = ["unsafe_textures", "ttf"]
 
 [workspace]
-members = [ "example_basic", "example_font" , "example_overlay"]
+members = [
+    "example_audio",
+    "example_basic",
+    "example_font",
+    "example_overlay",
+    "example_audio",
+]
