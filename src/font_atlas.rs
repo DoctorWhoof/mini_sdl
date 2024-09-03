@@ -7,6 +7,7 @@ use sdl2::{
     video::{Window, WindowContext},
 };
 use std::{collections::HashMap, path::Path};
+use crate::SdlResult;
 
 const CHARACTERS: &'static str =
     "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!@#$%^&*()-_=+,.:;'~? ";
@@ -113,7 +114,7 @@ impl FontAtlas {
         y: i32,
         scale: f32,
         canvas: &mut Canvas<Window>,
-    ) -> Result<(), String> {
+    ) -> SdlResult {
         let text: String = text.into();
         let mut x = x;
 

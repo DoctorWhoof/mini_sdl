@@ -29,6 +29,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+pub type SdlResult = Result<(), String>;
+
 const LOWER_ELAPSED_LIMIT: f64 = 1.0 / 360.0; // 3X 120Hz, 6X 60Hz
 
 /// A struct that provides SDL initialization and stores the SDL context and its associated data.
@@ -42,10 +44,6 @@ pub struct App {
     /// Minimum sleep time when limiting fps. The smaller it is, the more accurate it will be,
     /// but some platforms (Windows...) seem to struggle with that.
     pub idle_increments_microsecs: u64,
-    /// Performs quantization on the elapsed time, rounding it to the nearest most like display
-    /// frequency (i.e 60Hz, 72Hz, 90Hz, 120Hz, etc.). This allows for smooth, predictable delta-timing,
-    /// especially in pixel art games where precise 1Px increments per frame are common.
-    pub smooth_elapsed_time: bool,
     /// Prints every f32 seconds to the terminal the current FPS value.
     pub print_fps_interval: Option<f32>,
     /// Background color
@@ -76,8 +74,9 @@ pub struct App {
     app_time: Instant,
     last_second: Instant,
     frame_start: Instant,
-    update_time: f64,  // Elapsed time before presenting the canvas
-    elapsed_time: f64, // Whole frame time at current FPS
+    update_time: f64,      // Elapsed time before presenting the canvas.
+    elapsed_time: f64,     // Whole frame time at current FPS.
+    elapsed_time_raw: f64, // Elapsed time without quantizing and smoothing.
     // Overlay
     /// Provides a default FontAtlas for the overlay.
     pub default_font: Option<FontAtlas>,
@@ -137,8 +136,7 @@ impl App {
                 width,
                 height,
             )
-            .ok()
-            .unwrap();
+            .map_err(|e| e.to_string())?;
 
         let render_target = texture_creator
             .create_texture(
@@ -147,8 +145,7 @@ impl App {
                 width,
                 height,
             )
-            .ok()
-            .unwrap();
+            .map_err(|e| e.to_string())?;
 
         let fonts = sdl2::ttf::init().map_err(|e| e.to_string())?;
 
@@ -162,14 +159,13 @@ impl App {
         let audio_subsystem = context.audio()?;
         let audio_device = audio_subsystem.open_playback(None, &desired_spec, |spec| {
             println!("{:?}", spec);
-            AudioInput::new()
+            AudioInput::new(mix_rate)
         })?;
 
         Ok(Self {
             quit_requested: false,
             gamepad: GamePad::new(),
             idle_increments_microsecs: 100,
-            smooth_elapsed_time: true,
             print_fps_interval: None,
             bg_color: (0, 0, 0, 255),
             app_time: Instant::now(),
@@ -177,6 +173,7 @@ impl App {
             frame_start: Instant::now(),
             update_time: 0.0,
             elapsed_time: 0.0,
+            elapsed_time_raw: 0.0,
             width,
             height,
             dpi_mult,
@@ -200,8 +197,17 @@ impl App {
 
     /// The amount of time in seconds each frame takes to update and draw.
     /// Necessary to correctly implement delta timing, if you wish to do so.
+    /// Performs quantization, rounding it to the nearest most like display frequency
+    /// (i.e 60Hz, 72Hz, 90Hz, 120Hz, etc.). This allows for smooth, predictable delta-timing,
+    /// especially in pixel art games where precise 1Px increments per frame are common.
     pub fn elapsed_time(&self) -> f64 {
         self.elapsed_time
+    }
+
+    /// The elapsed time without any smoothing or quantization. Can lead to severe frame pacing issues
+    /// if used in delta-timing mechanisms.
+    pub fn elapsed_time_raw(&self) -> f64 {
+        self.elapsed_time_raw
     }
 
     /// The current frame rate.
@@ -229,18 +235,18 @@ impl App {
 
     /// Required at the start of a frame loop, performs basic timing math, clears the canvas and
     /// updates self.gamepad with the current values.
-    pub fn frame_start(&mut self) -> Result<(), String> {
+    pub fn frame_start(&mut self) -> SdlResult {
         // Whole frame time. Quantized to a minimum interval
         self.elapsed_time = self.frame_start.elapsed().as_secs_f64();
-        if self.smooth_elapsed_time {
-            self.elapsed_time = quantize(self.elapsed_time, LOWER_ELAPSED_LIMIT);
-            match self.timing {
-                Timing::VsyncLimitFPS(limit) | Timing::ImmediateLimitFPS(limit) => {
-                    let fps_limit = 1.0 / limit;
-                    self.elapsed_time = self.elapsed_time.clamp(fps_limit, 1.0);
-                }
-                _ => {}
+        self.elapsed_time_raw = self.elapsed_time;
+
+        self.elapsed_time = quantize(self.elapsed_time, LOWER_ELAPSED_LIMIT);
+        match self.timing {
+            Timing::VsyncLimitFPS(limit) | Timing::ImmediateLimitFPS(limit) => {
+                let fps_limit = 1.0 / limit;
+                self.elapsed_time = self.elapsed_time.clamp(fps_limit, 1.0);
             }
+            _ => {}
         }
 
         self.frame_start = Instant::now();
@@ -317,7 +323,7 @@ impl App {
     }
 
     /// Uses SDL's "texture.with_lock" function to access the pixel buffer as an RGB array.
-    pub fn pixel_buffer_update<F, R>(&mut self, func: F) -> Result<(), String>
+    pub fn pixel_buffer_update<F, R>(&mut self, func: F) -> SdlResult
     where
         F: FnOnce(&mut [u8], usize) -> R,
     {
@@ -352,7 +358,7 @@ impl App {
     }
 
     /// Presents the current pixel buffer respecting the scaling strategy.
-    pub fn pixel_buffer_present(&mut self) -> Result<(), String> {
+    pub fn pixel_buffer_present(&mut self) -> SdlResult {
         let rect = self.get_scaled_rect();
         self.canvas
             .copy_ex(&self.render_texture, None, rect, 0.0, None, false, false)?;
@@ -362,7 +368,7 @@ impl App {
     /// Presents the render target to the canvas respecting the scaling strategy.
     /// Warning: can be much slower than "pixel_buffer_present" if the goal is to simply
     /// draw pixel-by-pixel.
-    pub fn render_target_present(&mut self) -> Result<(), String> {
+    pub fn render_target_present(&mut self) -> SdlResult {
         let rect = self.get_scaled_rect();
         self.canvas
             .copy_ex(&self.render_target, None, rect, 0.0, None, false, false)?;
@@ -372,7 +378,7 @@ impl App {
     /// Required to be called at the end of a frame loop. Presents the canvas and performs an idle wait
     /// if frame rate limiting is required. Ironically, performing this idle loop may *lower* the CPU
     /// use in some platforms, compared to pure VSync!
-    pub fn frame_finish(&mut self) -> Result<(), String> {
+    pub fn frame_finish(&mut self) -> SdlResult {
         self.update_time = self
             .frame_start
             .elapsed()
@@ -443,7 +449,7 @@ impl App {
 
     /// Copies a slice of StereoFrames to the audio buffer. Ideally you should call this only once per frame,
     /// with all the samples that you need for that frame.
-    pub fn audio_push_samples(&mut self, samples: &[StereoFrame]) -> Result<(), String> {
+    pub fn audio_push_samples(&mut self, samples: &[StereoFrame]) -> SdlResult {
         let mut audio = self.audio_device.lock();
         audio.push_samples(samples);
         Ok(())
@@ -461,23 +467,3 @@ fn quantize(value: f64, size: f64) -> f64 {
         result
     }
 }
-
-// CAn't figure out how to test with SDL! This doesn't work
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-
-//     #[test]
-//     fn create_window() {
-//         let mut app = App::new(
-//             "test",
-//             320,
-//             240,
-//             Timing::VsyncLimitFPS(60.0),
-//             Scaling::PreserveAspect,
-//         ).unwrap();
-//         app.frame_start().unwrap();
-//         app.pixel_buffer_present().unwrap();
-//         app.frame_finish().unwrap();
-//     }
-// }

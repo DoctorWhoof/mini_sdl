@@ -15,20 +15,40 @@ pub struct AudioInput {
     buffer:  VecDeque<StereoFrame>,
     last_frame: StereoFrame,
     frame_count: usize,
+    mix_rate:u32,
 }
 
 impl AudioInput {
-    pub fn new() -> Self {
+    pub fn new(mix_rate:u32) -> Self {
         Self {
             buffer: VecDeque::default(),
             last_frame: StereoFrame::default(),
             frame_count: 0,
+            mix_rate
         }
     }
+
+    /// Estimates how many stereo frames to fill the buffer now for minimum lag without audio cut-offs.
+    pub fn frames_available(&self, elapsed:f64) -> usize {
+        let desired_frames = (elapsed * self.mix_rate as f64).round() as usize * 3;
+        let len = self.buffer.len();
+        if desired_frames > len {
+            desired_frames - len
+        } else {
+            0
+        }
+    }
+
 
     /// For debugging purposes, returns lengh of internal buffer
     pub fn buffer_len(&self) -> usize {
         self.buffer.len()
+    }
+
+    /// Push a single StereoFrame to the buffer.
+    #[inline(always)]
+    pub fn push_sample(&mut self, frame: StereoFrame) {
+        self.buffer.push_back(frame);
     }
 
     /// Push a slice of StereoFrames. Ideally you should call this only once per frame,

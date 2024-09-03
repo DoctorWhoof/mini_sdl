@@ -1,7 +1,7 @@
 use mini_sdl::*;
 use sdl2::{pixels::Color, rect::Rect};
 
-fn main() -> Result<(), String> {
+fn main() -> SdlResult {
     let mut app = mini_sdl::App::new(
         "test",
         320,
