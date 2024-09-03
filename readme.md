@@ -30,11 +30,11 @@ fn main() -> Result<(), String> {
     app.print_fps_interval = Some(1.0);
 
     while !app.quit_requested {
-        app.start_frame()?;
-        // When calling update_pixels, "buffer" receives access
+        app.frame_start()?;
+        // When calling pixel_buffer_update, "buffer" receives access
         // to the render_target pixels in RGB format.
         // _pitch, not used here, is how many bytes per row.
-        app.update_pixels(
+        app.pixel_buffer_update(
             |buffer: &mut [u8], _pitch: usize| {
                 let mut i = 0;
                 while i < buffer.len() {
@@ -45,8 +45,8 @@ fn main() -> Result<(), String> {
                 }
             }
         )?;
-        app.present_pixel_buffer()?;
-        app.finish_frame()?;
+        app.pixel_buffer_present()?;
+        app.frame_finish()?;
     }
     Ok(())
 }

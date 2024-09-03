@@ -10,7 +10,7 @@ fn main() -> Result<(), String> {
         Scaling::PreserveAspect,
     )?;
 
-    let rate = app.mix_rate() as f64;
+    let rate = app.audio_mixrate() as f64;
     let frequency = 440.0;  // 440Hz, frequency of note A4
     let period = 1.0 / frequency;
     let time_per_sample = 1.0 / rate; // Time duration of one sample
@@ -19,10 +19,10 @@ fn main() -> Result<(), String> {
     let mut accumulated_phase = 0.0;
     let mut samples = Vec::new();
 
-    app.start_audio();
+    app.audio_start();
 
     while !app.quit_requested {
-        app.start_frame()?;
+        app.frame_start()?;
         // Process audio
         let current_time = app.time();
         let time_delta = current_time - last_time;
@@ -42,10 +42,10 @@ fn main() -> Result<(), String> {
             accumulated_phase += time_per_sample;
         }
         // Copy new samples to app's audio buffer and reset samples container
-        app.push_audio_samples(samples.as_slice())?;
+        app.audio_push_samples(samples.as_slice())?;
         samples.clear();
         // Always call "start" and "finish" frame!
-        app.finish_frame()?;
+        app.frame_finish()?;
     }
     Ok(())
 }

@@ -13,10 +13,10 @@ fn main() -> Result<(), String> {
     println!("Current dir is:{:?}", std::env::current_dir());
     println!("Please run this example from the mini_sdl root using 'cargo run -p example_font'");
     println!("Otherwise the font file will not be found!");
-    let mut font = app.load_font("example_font/classic-display/classic-display.ttf", 16)?;
+    let mut font = app.font_load("example_font/classic-display/classic-display.ttf", 16)?;
 
     while !app.quit_requested {
-        app.start_frame()?;
+        app.frame_start()?;
         let scl = 2.0;
         // Draw to render_target
         app.canvas
@@ -33,7 +33,7 @@ fn main() -> Result<(), String> {
             })
             .map_err(|e| e.to_string())?;
         // Present target to canvas, keep drawing directly on canvas.
-        app.present_render_target()?;
+        app.render_target_present()?;
         font.color = Color::WHITE;
         font.draw(
             "This text is being drawn directly to canvas, which means it won't scale automatically...",
@@ -43,7 +43,7 @@ fn main() -> Result<(), String> {
             &mut app.canvas,
         )?;
         // Present canvas
-        app.finish_frame()?;
+        app.frame_finish()?;
     }
     Ok(())
 }

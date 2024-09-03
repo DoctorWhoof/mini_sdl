@@ -11,12 +11,12 @@ fn main() -> Result<(), String> {
     )?;
 
     app.default_font = Some(
-        app.load_font("example_font/classic-display/classic-display.ttf", 16)?
+        app.font_load("example_font/classic-display/classic-display.ttf", 16)?
     );
     app.overlay_scale = 4.0;
 
     while !app.quit_requested {
-        app.start_frame()?;
+        app.frame_start()?;
         app.overlay_push("This is the overlay!");
         app.overlay_push("It is always drawn on top of everything.");
         app.overlay_push("Every 'overlay_push' creates a new line.");
@@ -34,8 +34,8 @@ fn main() -> Result<(), String> {
             .map_err(|e| e.to_string())?;
         // Will present the render target with proper scaling on the canvas.
         // The overlay will still be drawn on top.
-        app.present_render_target()?;
-        app.finish_frame()?;
+        app.render_target_present()?;
+        app.frame_finish()?;
     }
     Ok(())
 }

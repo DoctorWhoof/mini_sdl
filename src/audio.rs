@@ -10,7 +10,7 @@ pub struct StereoFrame {
 }
 
 /// Used internally to push audio samples to the audio device. Although you can access it directly,
-/// it requires locking the audio device so it's easier to use 'App::push_audio_samples' instead.
+/// it requires locking the audio device so it's easier to use 'App::audio_push_samples' instead.
 pub struct AudioInput {
     buffer:  VecDeque<StereoFrame>,
     last_frame: StereoFrame,

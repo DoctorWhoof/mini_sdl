@@ -62,7 +62,7 @@ pub struct App {
     pub fonts: Sdl2TtfContext,
     /// The render target with the fixed resolution specified when creating the app.
     /// This is slower than the pixel buffer if your goal is to draw pixel-by-pixel
-    /// (use 'update_pixels' for that) but can use regular SDL drawing functions via
+    /// (use 'pixel_buffer_update' for that) but can use regular SDL drawing functions via
     /// "canvas.with_texture_canvas".
     pub render_target: Texture,
     render_texture: Texture,
@@ -219,8 +219,8 @@ impl App {
         self.overlay.push(text.into());
     }
 
-    /// Loads a new font
-    pub fn load_font<P>(&mut self, path: P, size: u16) -> Result<FontAtlas, String>
+    /// Loads a TTF font and converts it to a FontAtlas of fixed size.
+    pub fn font_load<P>(&mut self, path: P, size: u16) -> Result<FontAtlas, String>
     where
         P: AsRef<Path>,
     {
@@ -229,7 +229,7 @@ impl App {
 
     /// Required at the start of a frame loop, performs basic timing math, clears the canvas and
     /// updates self.gamepad with the current values.
-    pub fn start_frame(&mut self) -> Result<(), String> {
+    pub fn frame_start(&mut self) -> Result<(), String> {
         // Whole frame time. Quantized to a minimum interval
         self.elapsed_time = self.frame_start.elapsed().as_secs_f64();
         if self.smooth_elapsed_time {
@@ -317,7 +317,7 @@ impl App {
     }
 
     /// Uses SDL's "texture.with_lock" function to access the pixel buffer as an RGB array.
-    pub fn update_pixels<F, R>(&mut self, func: F) -> Result<(), String>
+    pub fn pixel_buffer_update<F, R>(&mut self, func: F) -> Result<(), String>
     where
         F: FnOnce(&mut [u8], usize) -> R,
     {
@@ -352,7 +352,7 @@ impl App {
     }
 
     /// Presents the current pixel buffer respecting the scaling strategy.
-    pub fn present_pixel_buffer(&mut self) -> Result<(), String> {
+    pub fn pixel_buffer_present(&mut self) -> Result<(), String> {
         let rect = self.get_scaled_rect();
         self.canvas
             .copy_ex(&self.render_texture, None, rect, 0.0, None, false, false)?;
@@ -360,9 +360,9 @@ impl App {
     }
 
     /// Presents the render target to the canvas respecting the scaling strategy.
-    /// Warning: can be much slower than "present_pixel_buffer" if the goal is to simply
+    /// Warning: can be much slower than "pixel_buffer_present" if the goal is to simply
     /// draw pixel-by-pixel.
-    pub fn present_render_target(&mut self) -> Result<(), String> {
+    pub fn render_target_present(&mut self) -> Result<(), String> {
         let rect = self.get_scaled_rect();
         self.canvas
             .copy_ex(&self.render_target, None, rect, 0.0, None, false, false)?;
@@ -372,7 +372,7 @@ impl App {
     /// Required to be called at the end of a frame loop. Presents the canvas and performs an idle wait
     /// if frame rate limiting is required. Ironically, performing this idle loop may *lower* the CPU
     /// use in some platforms, compared to pure VSync!
-    pub fn finish_frame(&mut self) -> Result<(), String> {
+    pub fn frame_finish(&mut self) -> Result<(), String> {
         self.update_time = self
             .frame_start
             .elapsed()
@@ -426,19 +426,24 @@ impl App {
     }
 
     // Audio
-    pub fn start_audio(&mut self) {
+    /// Initiates playback of audio device.
+    pub fn audio_start(&mut self) {
         self.audio_device.resume();
     }
 
-    pub fn pause_audio(&mut self) {
+    /// Pauses playback of audio device.
+    pub fn audio_pause(&mut self) {
         self.audio_device.pause()
     }
 
-    pub fn mix_rate(&self) -> i32 {
+    /// Returns the current audio mix rate. TODO: This is locked at 44100Hz, should be user adjustable.
+    pub fn audio_mixrate(&self) -> i32 {
         self.mix_rate
     }
 
-    pub fn push_audio_samples(&mut self, samples: &[StereoFrame]) -> Result<(), String> {
+    /// Copies a slice of StereoFrames to the audio buffer. Ideally you should call this only once per frame,
+    /// with all the samples that you need for that frame.
+    pub fn audio_push_samples(&mut self, samples: &[StereoFrame]) -> Result<(), String> {
         let mut audio = self.audio_device.lock();
         audio.push_samples(samples);
         Ok(())
@@ -471,8 +476,8 @@ fn quantize(value: f64, size: f64) -> f64 {
 //             Timing::VsyncLimitFPS(60.0),
 //             Scaling::PreserveAspect,
 //         ).unwrap();
-//         app.start_frame().unwrap();
-//         app.present_pixel_buffer().unwrap();
-//         app.finish_frame().unwrap();
+//         app.frame_start().unwrap();
+//         app.pixel_buffer_present().unwrap();
+//         app.frame_finish().unwrap();
 //     }
 // }
