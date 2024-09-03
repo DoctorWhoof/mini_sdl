@@ -6,11 +6,11 @@ mod gamepad;
 mod scaling;
 mod timing;
 
-pub use sdl2;
-pub use audio::{StereoFrame, AudioInput};
+pub use audio::{AudioInput, StereoFrame};
 pub use font_atlas::FontAtlas;
 pub use gamepad::{Button, GamePad};
 pub use scaling::Scaling;
+pub use sdl2;
 pub use timing::Timing;
 
 use sdl2::{
@@ -426,11 +426,11 @@ impl App {
     }
 
     // Audio
-    pub fn start_audio(&mut self){
+    pub fn start_audio(&mut self) {
         self.audio_device.resume();
     }
 
-    pub fn pause_audio(&mut self){
+    pub fn pause_audio(&mut self) {
         self.audio_device.pause()
     }
 
@@ -438,7 +438,7 @@ impl App {
         self.mix_rate
     }
 
-    pub fn push_audio_samples(&mut self, samples:&[StereoFrame]) -> Result<(), String> {
+    pub fn push_audio_samples(&mut self, samples: &[StereoFrame]) -> Result<(), String> {
         let mut audio = self.audio_device.lock();
         audio.push_samples(samples);
         Ok(())
