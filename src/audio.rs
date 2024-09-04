@@ -14,31 +14,32 @@ pub struct StereoFrame {
 pub struct AudioInput {
     buffer:  VecDeque<StereoFrame>,
     last_frame: StereoFrame,
-    frame_count: usize,
-    mix_rate:u32,
+    head: usize,
+    device_sample_count:u16
 }
 
 impl AudioInput {
-    pub fn new(mix_rate:u32) -> Self {
+    // pub fn new(mix_rate:u32) -> Self {
+    pub fn new(device_sample_count:u16) -> Self {
         Self {
             buffer: VecDeque::default(),
             last_frame: StereoFrame::default(),
-            frame_count: 0,
-            mix_rate
+            head: 0,
+            device_sample_count,
         }
     }
 
     /// Estimates how many stereo frames to fill the buffer now for minimum lag without audio cut-offs.
-    pub fn frames_available(&self, elapsed:f64) -> usize {
-        let desired_frames = (elapsed * self.mix_rate as f64).round() as usize * 3;
+    pub fn frames_available(&self) -> usize {
+        let desired_frames = self.device_sample_count as usize;
         let len = self.buffer.len();
-        if desired_frames > len {
+        if len < desired_frames {
+            // println!( "desired: {}, filled: {}, result:{}", desired_frames, len, desired_frames - len);
             desired_frames - len
         } else {
-            0
+            32
         }
     }
-
 
     /// For debugging purposes, returns lengh of internal buffer
     pub fn buffer_len(&self) -> usize {
@@ -66,13 +67,14 @@ impl<'a> AudioCallback for AudioInput {
 
     fn callback(&mut self, out: &mut [i16]) {
         for x in out.iter_mut() {
-            if self.frame_count % 2 == 0 {
+            if self.head % 2 == 0 {
+                self.head = 0;
                 self.last_frame = self.buffer.pop_front().unwrap_or_default();
                 *x = self.last_frame.left;
             } else {
                 *x = self.last_frame.right;
             }
-            self.frame_count += 1;
+            self.head += 1;
         }
     }
 }

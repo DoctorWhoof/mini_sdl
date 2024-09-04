@@ -14,7 +14,7 @@ pub use sdl2;
 pub use timing::Timing;
 
 use sdl2::{
-    audio::{AudioDevice, AudioSpecDesired},
+    audio::{AudioDevice, AudioQueue, AudioSpecDesired},
     event::Event,
     keyboard::Keycode,
     pixels::PixelFormatEnum,
@@ -150,16 +150,29 @@ impl App {
         let fonts = sdl2::ttf::init().map_err(|e| e.to_string())?;
 
         //Sound init
-        let mix_rate = 44100;
+        let mix_rate: u32 = 44100;
+        let sample_count = match timing {
+            Timing::Immediate | Timing::Vsync => {
+                u16::try_from(prev_power_of_two((mix_rate / 60) * 2))
+                    .unwrap()
+                    .clamp(1024, 8192)
+            }
+            Timing::VsyncLimitFPS(limit) | Timing::ImmediateLimitFPS(limit) => {
+                u16::try_from(prev_power_of_two((mix_rate as f64 / limit) as u32 * 2))
+                    .unwrap()
+                    .clamp(1024, 8192)
+            }
+        };
+
         let desired_spec = AudioSpecDesired {
             freq: Some(mix_rate as i32),
             channels: Some(2),
-            samples: None, // default sample size
+            samples: Some(sample_count),
         };
         let audio_subsystem = context.audio()?;
         let audio_device = audio_subsystem.open_playback(None, &desired_spec, |spec| {
             println!("{:?}", spec);
-            AudioInput::new(mix_rate)
+            AudioInput::new(sample_count)
         })?;
 
         Ok(Self {
@@ -459,11 +472,38 @@ impl App {
 #[inline(always)]
 // Skips quantization if value is too tiny, useful when getting elapsed time in
 // immediate timing mode and very fast frame rates.
-fn quantize(value: f64, size: f64) -> f64 {
+pub(crate) fn quantize(value: f64, size: f64) -> f64 {
     let result = (value / size).round() * size;
     if result < f64::EPSILON {
         value
     } else {
         result
     }
+}
+
+pub(crate) fn next_power_of_two(mut n: u32) -> u32 {
+    if n.is_power_of_two() {
+        return n;
+    }
+    n -= 1;
+    n |= n >> 1;
+    n |= n >> 2;
+    n |= n >> 4;
+    n |= n >> 8;
+    n |= n >> 16;
+    n += 1;
+    n
+}
+
+pub(crate) fn prev_power_of_two(n: u32) -> u32 {
+    if n.is_power_of_two() {
+        return n;
+    }
+    let mut x = n;
+    x |= x >> 1;
+    x |= x >> 2;
+    x |= x >> 4;
+    x |= x >> 8;
+    x |= x >> 16;
+    (x >> 1) + 1
 }

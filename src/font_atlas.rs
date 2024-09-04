@@ -7,7 +7,7 @@ use sdl2::{
     video::{Window, WindowContext},
 };
 use std::{collections::HashMap, path::Path};
-use crate::SdlResult;
+use crate::{next_power_of_two, SdlResult};
 
 const CHARACTERS: &'static str =
     "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!@#$%^&*()-_=+,.:;'~? ";
@@ -62,7 +62,7 @@ impl FontAtlas {
         }
 
         // Combine all character surfaces into a single atlas surface
-        let res = power_of_two((pixel_count as f32).sqrt().ceil() as u32);
+        let res = next_power_of_two((pixel_count as f32).sqrt().ceil() as u32);
         let mut atlas = Surface::new(res, res, sdl2::pixels::PixelFormatEnum::RGBA8888)?;
         let mut rects = HashMap::new();
         let mut row_height = 0;
@@ -135,18 +135,4 @@ impl FontAtlas {
         }
         Ok(())
     }
-}
-
-fn power_of_two(mut n: u32) -> u32 {
-    if n < 8 {
-        return 8; // Smallest value will be 8
-    }
-    n -= 1;
-    n |= n >> 1;
-    n |= n >> 2;
-    n |= n >> 4;
-    n |= n >> 8;
-    n |= n >> 16;
-    n += 1;
-    n
 }
