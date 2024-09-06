@@ -31,7 +31,7 @@ impl AudioInput {
 
     /// Estimates how many stereo frames to fill the buffer now for minimum lag without audio cut-offs.
     pub fn frames_available(&self) -> usize {
-        let desired_frames = self.device_sample_count as usize;
+        let desired_frames = self.device_sample_count as usize * 2;
         let len = self.buffer.len();
         if len < desired_frames {
             // println!( "desired: {}, filled: {}, result:{}", desired_frames, len, desired_frames - len);

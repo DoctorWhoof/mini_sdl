@@ -14,7 +14,7 @@ pub use sdl2;
 pub use timing::Timing;
 
 use sdl2::{
-    audio::{AudioDevice, AudioQueue, AudioSpecDesired},
+    audio::{AudioDevice, AudioSpecDesired},
     event::Event,
     keyboard::Keycode,
     pixels::PixelFormatEnum,
@@ -101,6 +101,7 @@ impl App {
         height: u32,
         timing: Timing,
         scaling: Scaling,
+        sample_rate: u32,
     ) -> Result<Self, String> {
         let context = sdl2::init()?;
         let video_subsystem = context.video()?;
@@ -150,22 +151,22 @@ impl App {
         let fonts = sdl2::ttf::init().map_err(|e| e.to_string())?;
 
         //Sound init
-        let mix_rate: u32 = 44100;
+        // let mix_rate: u32 = 44100;
         let sample_count = match timing {
             Timing::Immediate | Timing::Vsync => {
-                u16::try_from(prev_power_of_two((mix_rate / 60) * 2))
+                u16::try_from(prev_power_of_two((sample_rate / 60) * 2))
                     .unwrap()
                     .clamp(1024, 8192)
             }
             Timing::VsyncLimitFPS(limit) | Timing::ImmediateLimitFPS(limit) => {
-                u16::try_from(prev_power_of_two((mix_rate as f64 / limit) as u32 * 2))
+                u16::try_from(prev_power_of_two((sample_rate as f64 / limit) as u32 * 2))
                     .unwrap()
                     .clamp(1024, 8192)
             }
         };
 
         let desired_spec = AudioSpecDesired {
-            freq: Some(mix_rate as i32),
+            freq: Some(sample_rate as i32),
             channels: Some(2),
             samples: Some(sample_count),
         };

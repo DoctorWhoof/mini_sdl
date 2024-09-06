@@ -8,6 +8,7 @@ fn main() -> SdlResult {
         240,
         Timing::VsyncLimitFPS(60.0),
         Scaling::PreserveAspect,
+        48000
     )?;
 
     println!("Current dir is:{:?}", std::env::current_dir());
