@@ -89,12 +89,19 @@ pub struct App {
     overlay: Vec<String>,
     // Sound
     pub audio_device: AudioDevice<AudioInput>,
-    mix_rate: i32,
+    sample_rate: u32,
     // buffer: VecDeque<StereoFrame>,
 }
 
+
+
 impl App {
-    /// Returns a new App with a fixed size pixel buffer.
+    /// Returns a result with an App with default configuration
+    pub fn default() -> Result<Self, String> {
+        Self::new("App", 320, 240, Timing::VsyncLimitFPS(60.0), Scaling::PreserveAspect, 48000)
+    }
+
+    /// Returns a result containing a new App with a fixed size pixel buffer.
     pub fn new(
         name: &str,
         width: u32,
@@ -204,7 +211,7 @@ impl App {
             overlay_line_spacing: 1.0,
             overlay_scale: 1.0,
             overlay_coords: Point::new(16, 16),
-            mix_rate: 44100,
+            sample_rate,
             audio_device,
         })
     }
@@ -298,7 +305,7 @@ impl App {
                         Some(Keycode::NUM_2) => self.gamepad.set(Button::RightTrigger, true),
                         Some(Keycode::W) => self.gamepad.set(Button::RightShoulder, true),
                         Some(Keycode::TAB) => self.gamepad.set(Button::Select, true),
-                        Some(Keycode::RETURN) => self.gamepad.set(Button::Select, true),
+                        Some(Keycode::RETURN) => self.gamepad.set(Button::Start, true),
                         Some(_) => {} // ignore the rest
                     }
                 }
@@ -323,7 +330,7 @@ impl App {
                         Some(Keycode::NUM_2) => self.gamepad.set(Button::RightTrigger, false),
                         Some(Keycode::W) => self.gamepad.set(Button::RightShoulder, false),
                         Some(Keycode::TAB) => self.gamepad.set(Button::Select, false),
-                        Some(Keycode::RETURN) => self.gamepad.set(Button::Select, false),
+                        Some(Keycode::RETURN) => self.gamepad.set(Button::Start, false),
                         Some(_) => {} // ignore the rest
                     }
                 }
@@ -457,8 +464,8 @@ impl App {
     }
 
     /// Returns the current audio mix rate. TODO: This is locked at 44100Hz, should be user adjustable.
-    pub fn audio_mixrate(&self) -> i32 {
-        self.mix_rate
+    pub fn audio_mixrate(&self) -> u32 {
+        self.sample_rate
     }
 
     /// Copies a slice of StereoFrames to the audio buffer. Ideally you should call this only once per frame,
