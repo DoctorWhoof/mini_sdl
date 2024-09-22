@@ -280,7 +280,7 @@ impl App {
             }
         }
 
-        self.gamepad.set_previous_state();
+        self.gamepad.copy_current_to_previous_state();
         for event in self.context.event_pump()?.poll_iter() {
             match event {
                 Event::Quit { .. } => self.quit_requested = true,

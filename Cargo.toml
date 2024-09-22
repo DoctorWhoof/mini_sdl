@@ -17,6 +17,7 @@ members = [
     "example_audio",
     "example_basic",
     "example_font",
+    "example_gamepad",
     "example_overlay",
     "example_audio",
 ]

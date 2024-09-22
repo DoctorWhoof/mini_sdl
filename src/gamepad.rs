@@ -12,6 +12,7 @@ pub struct GamePad{
 #[repr(u16)]
 #[derive(Clone, Copy, Debug)]
 pub enum Button {
+    None = 0,
     Up = 1,
     Down = 2,
     Left = 4,
@@ -28,6 +29,28 @@ pub enum Button {
     RightShoulder = 8192,
 }
 
+impl From<u16> for Button {
+    fn from(val: u16) -> Self {
+        match val {
+            1 => Button::Up,
+            2 => Button::Down,
+            4 => Button::Left,
+            8 => Button::Right,
+            16 => Button::A,
+            32 => Button::B,
+            64 => Button::X,
+            128 => Button::Y,
+            256 => Button::Start,
+            512 => Button::Select,
+            1024 => Button::LeftTrigger,
+            2048 => Button::RightTrigger,
+            4096 => Button::LeftShoulder,
+            8192 => Button::RightShoulder,
+            _ => Button::None
+        }
+    }
+}
+
 impl GamePad {
     pub fn new() -> Self {
         Self::default()
@@ -37,8 +60,37 @@ impl GamePad {
         (self.current & button as u16) != 0
     }
 
+    pub fn is_released(&self, button:Button) -> bool{
+        (self.current & button as u16) == 0
+    }
+
     pub fn is_just_pressed(&self, button:Button) -> bool{
         self.is_pressed(button) && (self.previous & button as u16 == 0)
+    }
+
+    pub fn is_just_released(&self, button:Button) -> bool{
+        !self.is_pressed(button) && (self.previous & button as u16 != 0)
+    }
+
+    pub fn state_to_str(&self) -> &'static str {
+        let state:Button = self.current.into();
+        match state {
+            Button::None => "None or Multiple",
+            Button::Up => "Up",
+            Button::Down => "Down",
+            Button::Left => "Left",
+            Button::Right => "Right",
+            Button::A => "A",
+            Button::B => "B",
+            Button::X => "X",
+            Button::Y => "Y",
+            Button::Start => "Start",
+            Button::Select => "Select",
+            Button::LeftTrigger => "LeftTrigger",
+            Button::RightTrigger => "RightTrigger",
+            Button::LeftShoulder => "LeftShoulder",
+            Button::RightShoulder => "RightShoulder",
+        }
     }
 
     pub(crate) fn set(&mut self, button:Button, value:bool){
@@ -49,7 +101,7 @@ impl GamePad {
         }
     }
 
-    pub(crate) fn set_previous_state(&mut self){
+    pub(crate) fn copy_current_to_previous_state(&mut self){
         self.previous = self.current;
     }
 }
