@@ -25,6 +25,7 @@ fn main() -> SdlResult {
         240,
         Timing::VsyncLimitFPS(60.0),
         Scaling::PreserveAspect,
+        44100
     )?;
 
     app.print_fps_interval = Some(1.0);
