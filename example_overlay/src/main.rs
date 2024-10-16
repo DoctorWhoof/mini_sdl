@@ -12,7 +12,7 @@ fn main() -> SdlResult {
     )?;
 
     app.default_font = Some(
-        app.font_load("example_font/classic-display/classic-display.ttf", 16)?
+        app.font_load("example_overlay/src/classic-display/classic-display.ttf", 16)?
     );
     app.overlay_scale = 4.0;
 

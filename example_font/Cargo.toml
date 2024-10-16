@@ -4,4 +4,4 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-mini_sdl = { path = "../" }
+mini_sdl = { path = "../", features = ["ttf"]}

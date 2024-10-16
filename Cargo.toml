@@ -10,7 +10,12 @@ documentation = "https://docs.rs/mini_sdl/latest/mini_sdl/"
 [dependencies.sdl2]
 version = "0.37.0"
 default-features = false
-features = ["unsafe_textures", "ttf"]
+features = ["unsafe_textures"]
+
+[features]
+default = []
+static-link = ["sdl2/static-link"]
+ttf = ["sdl2/ttf"]
 
 [workspace]
 members = [

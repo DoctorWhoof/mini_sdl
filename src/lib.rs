@@ -1,17 +1,18 @@
 #![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/readme.md"))]
 
 mod audio;
-mod font_atlas;
 mod gamepad;
 mod scaling;
 mod timing;
 
 pub use audio::{AudioInput, StereoFrame};
-pub use font_atlas::FontAtlas;
 pub use gamepad::{Button, GamePad};
 pub use scaling::Scaling;
 pub use sdl2;
 pub use timing::Timing;
+
+#[cfg(feature="ttf")] mod font_atlas;
+#[cfg(feature="ttf")] pub use font_atlas::FontAtlas;
 
 use sdl2::{
     audio::{AudioDevice, AudioSpecDesired},
@@ -20,7 +21,7 @@ use sdl2::{
     pixels::PixelFormatEnum,
     rect::{Point, Rect},
     render::{Canvas, Texture, TextureAccess, TextureCreator},
-    ttf::Sdl2TtfContext,
+    // ttf::Sdl2TtfContext,
     video::{Window, WindowContext},
     Sdl,
 };
@@ -57,7 +58,7 @@ pub struct App {
     /// The internal SDL context.
     pub context: Sdl,
     /// The SDL TTF context
-    pub fonts: Sdl2TtfContext,
+    #[cfg(feature="ttf")] pub fonts: sdl2::ttf::Sdl2TtfContext,
     /// The render target with the fixed resolution specified when creating the app.
     /// This is slower than the pixel buffer if your goal is to draw pixel-by-pixel
     /// (use 'pixel_buffer_update' for that) but can use regular SDL drawing functions via
@@ -79,14 +80,14 @@ pub struct App {
     elapsed_time_raw: f64, // Elapsed time without quantizing and smoothing.
     // Overlay
     /// Provides a default FontAtlas for the overlay.
-    pub default_font: Option<FontAtlas>,
+    #[cfg(feature="ttf")] pub default_font: Option<FontAtlas>,
     /// Scales the distance from line to line.
-    pub overlay_line_spacing: f32,
+    #[cfg(feature="ttf")] pub overlay_line_spacing: f32,
     /// Scales the rendering of the entire overlay text.
-    pub overlay_scale: f32,
+    #[cfg(feature="ttf")] pub overlay_scale: f32,
     /// Initial coordinates (left, top) of the overlay text.
-    pub overlay_coords: Point,
-    overlay: Vec<String>,
+    #[cfg(feature="ttf")] pub overlay_coords: Point,
+    #[cfg(feature="ttf")] overlay: Vec<String>,
     // Sound
     pub audio_device: AudioDevice<AudioInput>,
     sample_rate: u32,
@@ -155,8 +156,6 @@ impl App {
             )
             .map_err(|e| e.to_string())?;
 
-        let fonts = sdl2::ttf::init().map_err(|e| e.to_string())?;
-
         //Sound init
         // let mix_rate: u32 = 44100;
         let sample_count = match timing {
@@ -205,14 +204,14 @@ impl App {
             render_target,
             context,
             texture_creator,
-            fonts,
-            default_font: None,
-            overlay: Vec::with_capacity(100),
-            overlay_line_spacing: 1.0,
-            overlay_scale: 1.0,
-            overlay_coords: Point::new(16, 16),
             sample_rate,
             audio_device,
+            #[cfg(feature = "ttf")] fonts: sdl2::ttf::init().map_err(|e| e.to_string())?,
+            #[cfg(feature="ttf")] default_font: None,
+            #[cfg(feature="ttf")] overlay: Vec::with_capacity(100),
+            #[cfg(feature="ttf")] overlay_line_spacing: 1.0,
+            #[cfg(feature="ttf")] overlay_scale: 1.0,
+            #[cfg(feature="ttf")] overlay_coords: Point::new(16, 16),
         })
     }
 
@@ -242,10 +241,12 @@ impl App {
     }
 
     /// Adds a line of text to the overlay. The overlay text is cleared on every frame.
+    #[cfg(feature="ttf")]
     pub fn overlay_push(&mut self, text: impl Into<String>) {
         self.overlay.push(text.into());
     }
 
+    #[cfg(feature = "ttf")]
     /// Loads a TTF font and converts it to a FontAtlas of fixed size.
     pub fn font_load<P>(&mut self, path: P, size: u16) -> Result<FontAtlas, String>
     where
@@ -407,22 +408,24 @@ impl App {
             .clamp(0.0, 1.0 / 30.0);
 
         // Overlay
-        if let Some(font) = &mut self.default_font {
-            // self.canvas.set_draw_color((255, 255, 255, 255));
-            let mut y = self.overlay_coords.y;
-            for line in &self.overlay {
-                font.draw(
-                    line,
-                    self.overlay_coords.x,
-                    y,
-                    self.overlay_scale,
-                    &mut self.canvas,
-                )?;
-                let inc = (font.height() as f32 * self.overlay_line_spacing) * self.overlay_scale;
-                y += inc as i32;
+        #[cfg(feature="ttf")]{
+            if let Some(font) = &mut self.default_font {
+                // self.canvas.set_draw_color((255, 255, 255, 255));
+                let mut y = self.overlay_coords.y;
+                for line in &self.overlay {
+                    font.draw(
+                        line,
+                        self.overlay_coords.x,
+                        y,
+                        self.overlay_scale,
+                        &mut self.canvas,
+                    )?;
+                    let inc = (font.height() as f32 * self.overlay_line_spacing) * self.overlay_scale;
+                    y += inc as i32;
+                }
             }
+            self.overlay.clear();
         }
-        self.overlay.clear();
 
         match self.timing {
             // Optional FPS limiting

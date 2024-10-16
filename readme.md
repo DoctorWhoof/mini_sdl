@@ -51,3 +51,13 @@ fn main() -> SdlResult {
     Ok(())
 }
 ```
+
+### Static Builds
+
+To build statically, run the 'cargo build' command preceded by these flags which will point out where "sdl2" and "sdl2_ttf" are:
+
+```bash
+RUSTFLAGS='-L /opt/homebrew/Cellar/sdl2/2.30.8/lib -L /opt/homebrew/Cellar/sdl2_ttf/2.22.0/lib' cargo build
+```
+
+Replace the paths with ones valid for your system, then add the "static-link" feature to cargo.toml.
