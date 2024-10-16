@@ -19,14 +19,14 @@ use sdl2::{
     event::Event,
     keyboard::Keycode,
     pixels::PixelFormatEnum,
-    rect::{Point, Rect},
+    rect::Rect,
     render::{Canvas, Texture, TextureAccess, TextureCreator},
     // ttf::Sdl2TtfContext,
     video::{Window, WindowContext},
     Sdl,
 };
 use std::{
-    path::Path,
+    // path::Path,
     time::{Duration, Instant},
 };
 
@@ -86,7 +86,7 @@ pub struct App {
     /// Scales the rendering of the entire overlay text.
     #[cfg(feature="ttf")] pub overlay_scale: f32,
     /// Initial coordinates (left, top) of the overlay text.
-    #[cfg(feature="ttf")] pub overlay_coords: Point,
+    #[cfg(feature="ttf")] pub overlay_coords: sdl2::rect::Point,
     #[cfg(feature="ttf")] overlay: Vec<String>,
     // Sound
     pub audio_device: AudioDevice<AudioInput>,
@@ -211,7 +211,7 @@ impl App {
             #[cfg(feature="ttf")] overlay: Vec::with_capacity(100),
             #[cfg(feature="ttf")] overlay_line_spacing: 1.0,
             #[cfg(feature="ttf")] overlay_scale: 1.0,
-            #[cfg(feature="ttf")] overlay_coords: Point::new(16, 16),
+            #[cfg(feature="ttf")] overlay_coords: sdl2::rect::Point::new(16, 16),
         })
     }
 
@@ -250,7 +250,7 @@ impl App {
     /// Loads a TTF font and converts it to a FontAtlas of fixed size.
     pub fn font_load<P>(&mut self, path: P, size: u16) -> Result<FontAtlas, String>
     where
-        P: AsRef<Path>,
+        P: AsRef<std::path::Path>,
     {
         FontAtlas::new(path, size, &self.fonts, &mut self.texture_creator)
     }
@@ -492,6 +492,7 @@ pub(crate) fn quantize(value: f64, size: f64) -> f64 {
     }
 }
 
+#[allow(unused)]
 pub(crate) fn next_power_of_two(mut n: u32) -> u32 {
     if n.is_power_of_two() {
         return n;
