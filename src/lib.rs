@@ -9,6 +9,7 @@ pub use audio::{AudioInput, StereoFrame};
 pub use gamepad::{Button, GamePad};
 pub use scaling::Scaling;
 pub use sdl2;
+use smooth_buffer::SmoothBuffer;
 pub use timing::Timing;
 
 #[cfg(feature="ttf")] mod font_atlas;
@@ -75,7 +76,7 @@ pub struct App {
     app_time: Instant,
     last_second: Instant,
     frame_start: Instant,
-    update_time: f64,      // Elapsed time before presenting the canvas.
+    update_time_buffer: SmoothBuffer<60, f64>,
     elapsed_time: f64,     // Whole frame time at current FPS.
     elapsed_time_raw: f64, // Elapsed time without quantizing and smoothing.
     // Overlay
@@ -191,7 +192,7 @@ impl App {
             app_time: Instant::now(),
             last_second: Instant::now(),
             frame_start: Instant::now(),
-            update_time: 0.0,
+            update_time_buffer: SmoothBuffer::pre_filled(60.0),
             elapsed_time: 0.0,
             elapsed_time_raw: 0.0,
             width,
@@ -228,6 +229,11 @@ impl App {
     /// if used in delta-timing mechanisms.
     pub fn elapsed_time_raw(&self) -> f64 {
         self.elapsed_time_raw
+    }
+
+    /// How long the frame took to update before presenting the canvas.
+    pub fn update_time(&self) -> f64 {
+        self.update_time_buffer.average()
     }
 
     /// The current frame rate.
@@ -401,11 +407,12 @@ impl App {
     /// if frame rate limiting is required. Ironically, performing this idle loop may *lower* the CPU
     /// use in some platforms, compared to pure VSync!
     pub fn frame_finish(&mut self) -> SdlResult {
-        self.update_time = self
+        self.update_time_buffer.push(self
             .frame_start
             .elapsed()
             .as_secs_f64()
-            .clamp(0.0, 1.0 / 30.0);
+            .clamp(0.0, 1.0)
+        );
 
         // Overlay
         #[cfg(feature="ttf")]{
