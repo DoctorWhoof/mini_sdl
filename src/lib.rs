@@ -5,12 +5,15 @@ mod gamepad;
 mod scaling;
 mod timing;
 
+use smooth_buffer::SmoothBuffer;
+pub use smooth_buffer::Float;
+
 pub use audio::{AudioInput, StereoFrame};
 pub use gamepad::{Button, GamePad};
 pub use scaling::Scaling;
-pub use sdl2;
-use smooth_buffer::SmoothBuffer;
+
 pub use timing::Timing;
+pub use sdl2;
 
 #[cfg(feature="ttf")] mod font_atlas;
 #[cfg(feature="ttf")] pub use font_atlas::FontAtlas;
@@ -76,7 +79,7 @@ pub struct App {
     app_time: Instant,
     last_second: Instant,
     frame_start: Instant,
-    update_time_buffer: SmoothBuffer<60, f64>,
+    update_time_buffer: SmoothBuffer<120, f64>,
     elapsed_time: f64,     // Whole frame time at current FPS.
     elapsed_time_raw: f64, // Elapsed time without quantizing and smoothing.
     // Overlay
@@ -192,7 +195,7 @@ impl App {
             app_time: Instant::now(),
             last_second: Instant::now(),
             frame_start: Instant::now(),
-            update_time_buffer: SmoothBuffer::pre_filled(60.0),
+            update_time_buffer: SmoothBuffer::pre_filled(0.0),
             elapsed_time: 0.0,
             elapsed_time_raw: 0.0,
             width,
@@ -407,12 +410,14 @@ impl App {
     /// if frame rate limiting is required. Ironically, performing this idle loop may *lower* the CPU
     /// use in some platforms, compared to pure VSync!
     pub fn frame_finish(&mut self) -> SdlResult {
-        self.update_time_buffer.push(self
-            .frame_start
-            .elapsed()
-            .as_secs_f64()
-            .clamp(0.0, 1.0)
-        );
+        if self.app_time.elapsed().as_secs_f32() > 1.0 { // Skips the first second
+            self.update_time_buffer.push(self
+                .frame_start
+                .elapsed()
+                .as_secs_f64()
+                .clamp(0.0, 1.0)
+            );
+        }
 
         // Overlay
         #[cfg(feature="ttf")]{
