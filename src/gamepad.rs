@@ -27,6 +27,7 @@ pub enum Button {
     RightTrigger = 2048,
     LeftShoulder = 4096,
     RightShoulder = 8192,
+    Menu = 16384,
 }
 
 impl From<u16> for Button {
@@ -46,6 +47,7 @@ impl From<u16> for Button {
             2048 => Button::RightTrigger,
             4096 => Button::LeftShoulder,
             8192 => Button::RightShoulder,
+            16384 => Button::Menu,
             _ => Button::None
         }
     }
@@ -90,6 +92,7 @@ impl GamePad {
             Button::RightTrigger => "RightTrigger",
             Button::LeftShoulder => "LeftShoulder",
             Button::RightShoulder => "RightShoulder",
+            Button::Menu => "Menu",
         }
     }
 

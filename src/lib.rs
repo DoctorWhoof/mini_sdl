@@ -51,9 +51,10 @@ pub struct App {
     pub idle_increments_microsecs: u64,
     /// Prints every f32 seconds to the terminal the current FPS value.
     pub print_fps_interval: Option<f32>,
-    /// Background color
+    /// Background color.
     pub bg_color: (u8, u8, u8, u8),
-    ///
+    /// Controls whether text overlay is visible.
+    pub display_overlay: bool,
     // SDL
     /// The internal SDL canvas. It is automatically cleared on every frame start.
     pub canvas: Canvas<Window>,
@@ -192,6 +193,7 @@ impl App {
             idle_increments_microsecs: 100,
             print_fps_interval: None,
             bg_color: (0, 0, 0, 255),
+            display_overlay: true,
             app_time: Instant::now(),
             last_second: Instant::now(),
             frame_start: Instant::now(),
@@ -316,6 +318,7 @@ impl App {
                         Some(Keycode::W) => self.gamepad.set(Button::RightShoulder, true),
                         Some(Keycode::TAB) => self.gamepad.set(Button::Select, true),
                         Some(Keycode::RETURN) => self.gamepad.set(Button::Start, true),
+                        Some(Keycode::ESCAPE) => self.gamepad.set(Button::Menu, true),
                         Some(_) => {} // ignore the rest
                     }
                 }
@@ -341,6 +344,7 @@ impl App {
                         Some(Keycode::W) => self.gamepad.set(Button::RightShoulder, false),
                         Some(Keycode::TAB) => self.gamepad.set(Button::Select, false),
                         Some(Keycode::RETURN) => self.gamepad.set(Button::Start, false),
+                        Some(Keycode::ESCAPE) => self.gamepad.set(Button::Menu, false),
                         Some(_) => {} // ignore the rest
                     }
                 }
@@ -421,19 +425,21 @@ impl App {
 
         // Overlay
         #[cfg(feature="ttf")]{
-            if let Some(font) = &mut self.default_font {
-                // self.canvas.set_draw_color((255, 255, 255, 255));
-                let mut y = self.overlay_coords.y;
-                for line in &self.overlay {
-                    font.draw(
-                        line,
-                        self.overlay_coords.x,
-                        y,
-                        self.overlay_scale,
-                        &mut self.canvas,
-                    )?;
-                    let inc = (font.height() as f32 * self.overlay_line_spacing) * self.overlay_scale;
-                    y += inc as i32;
+            if self.display_overlay {
+                if let Some(font) = &mut self.default_font {
+                    // self.canvas.set_draw_color((255, 255, 255, 255));
+                    let mut y = self.overlay_coords.y;
+                    for line in &self.overlay {
+                        font.draw(
+                            line,
+                            self.overlay_coords.x,
+                            y,
+                            self.overlay_scale,
+                            &mut self.canvas,
+                        )?;
+                        let inc = (font.height() as f32 * self.overlay_line_spacing) * self.overlay_scale;
+                        y += inc as i32;
+                    }
                 }
             }
             self.overlay.clear();
