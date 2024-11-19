@@ -39,7 +39,7 @@ impl FontAtlas {
             let Some(m) = ttf_font.find_glyph_metrics(ch) else {
                 continue;
             };
-            let w = m.advance as u32 + m.minx.abs() as u32;
+            let w = m.advance as u32;// + m.minx.abs() as u32; // Removed since it was breaking a mono-spaced font, needs more testing
             let h = ttf_font.height() - m.miny.abs();
             let y = m.miny.abs();
             let rect = Rect::new(x, y, w, h as u32);

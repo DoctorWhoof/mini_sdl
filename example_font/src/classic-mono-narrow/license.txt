@@ -1,0 +1,12 @@
+﻿The FontStruction “Classic Mono Narrow”
+(https://fontstruct.com/fontstructions/show/2577851) by “leosantos” is
+licensed under a Creative Commons Attribution Share Alike license
+(http://creativecommons.org/licenses/by-sa/3.0/).
+“Classic Mono Narrow” was originally cloned (copied) from the FontStruction
+“Classic Mono Bold” (https://fontstruct.com/fontstructions/show/1607179) by
+“leosantos”, which is licensed under a Creative Commons Attribution Share
+Alike license (http://creativecommons.org/licenses/by-sa/3.0/).
+“Classic Mono Bold” was in turn cloned (copied) from the FontStruction
+“Classic Display” (https://fontstruct.com/fontstructions/show/1007057) by
+“leosantos”, which is licensed under a Creative Commons Attribution Share
+Alike license (http://creativecommons.org/licenses/by-sa/3.0/).

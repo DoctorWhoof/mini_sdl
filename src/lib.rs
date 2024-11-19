@@ -5,18 +5,20 @@ mod gamepad;
 mod scaling;
 mod timing;
 
-use smooth_buffer::SmoothBuffer;
 pub use smooth_buffer::Float;
+use smooth_buffer::SmoothBuffer;
 
 pub use audio::{AudioInput, StereoFrame};
 pub use gamepad::{Button, GamePad};
 pub use scaling::Scaling;
 
-pub use timing::Timing;
 pub use sdl2;
+pub use timing::Timing;
 
-#[cfg(feature="ttf")] mod font_atlas;
-#[cfg(feature="ttf")] pub use font_atlas::FontAtlas;
+#[cfg(feature = "ttf")]
+mod font_atlas;
+#[cfg(feature = "ttf")]
+pub use font_atlas::FontAtlas;
 
 use sdl2::{
     audio::{AudioDevice, AudioSpecDesired},
@@ -63,7 +65,8 @@ pub struct App {
     /// The internal SDL context.
     pub context: Sdl,
     /// The SDL TTF context
-    #[cfg(feature="ttf")] pub fonts: sdl2::ttf::Sdl2TtfContext,
+    #[cfg(feature = "ttf")]
+    pub fonts: sdl2::ttf::Sdl2TtfContext,
     /// The render target with the fixed resolution specified when creating the app.
     /// This is slower than the pixel buffer if your goal is to draw pixel-by-pixel
     /// (use 'pixel_buffer_update' for that) but can use regular SDL drawing functions via
@@ -85,26 +88,36 @@ pub struct App {
     elapsed_time_raw: f64, // Elapsed time without quantizing and smoothing.
     // Overlay
     /// Provides a default FontAtlas for the overlay.
-    #[cfg(feature="ttf")] pub default_font: Option<FontAtlas>,
+    #[cfg(feature = "ttf")]
+    pub default_font: Option<FontAtlas>,
     /// Scales the distance from line to line.
-    #[cfg(feature="ttf")] pub overlay_line_spacing: f32,
+    #[cfg(feature = "ttf")]
+    pub overlay_line_spacing: f32,
     /// Scales the rendering of the entire overlay text.
-    #[cfg(feature="ttf")] pub overlay_scale: f32,
+    #[cfg(feature = "ttf")]
+    pub overlay_scale: f32,
     /// Initial coordinates (left, top) of the overlay text.
-    #[cfg(feature="ttf")] pub overlay_coords: sdl2::rect::Point,
-    #[cfg(feature="ttf")] overlay: Vec<String>,
+    #[cfg(feature = "ttf")]
+    pub overlay_coords: sdl2::rect::Point,
+    #[cfg(feature = "ttf")]
+    overlay: Vec<String>,
     // Sound
     pub audio_device: AudioDevice<AudioInput>,
     sample_rate: u32,
     // buffer: VecDeque<StereoFrame>,
 }
 
-
-
 impl App {
     /// Returns a result with an App with default configuration
     pub fn default() -> Result<Self, String> {
-        Self::new("App", 320, 240, Timing::VsyncLimitFPS(60.0), Scaling::PreserveAspect, 48000)
+        Self::new(
+            "App",
+            320,
+            240,
+            Timing::VsyncLimitFPS(60.0),
+            Scaling::PreserveAspect,
+            48000,
+        )
     }
 
     /// Returns a result containing a new App with a fixed size pixel buffer.
@@ -212,12 +225,18 @@ impl App {
             texture_creator,
             sample_rate,
             audio_device,
-            #[cfg(feature = "ttf")] fonts: sdl2::ttf::init().map_err(|e| e.to_string())?,
-            #[cfg(feature="ttf")] default_font: None,
-            #[cfg(feature="ttf")] overlay: Vec::with_capacity(100),
-            #[cfg(feature="ttf")] overlay_line_spacing: 1.0,
-            #[cfg(feature="ttf")] overlay_scale: 1.0,
-            #[cfg(feature="ttf")] overlay_coords: sdl2::rect::Point::new(16, 16),
+            #[cfg(feature = "ttf")]
+            fonts: sdl2::ttf::init().map_err(|e| e.to_string())?,
+            #[cfg(feature = "ttf")]
+            default_font: None,
+            #[cfg(feature = "ttf")]
+            overlay: Vec::with_capacity(100),
+            #[cfg(feature = "ttf")]
+            overlay_line_spacing: 1.0,
+            #[cfg(feature = "ttf")]
+            overlay_scale: 1.0,
+            #[cfg(feature = "ttf")]
+            overlay_coords: sdl2::rect::Point::new(16, 16),
         })
     }
 
@@ -247,12 +266,12 @@ impl App {
     }
 
     /// Time in seconds since the start of the app
-    pub fn time(&self) -> f64 {
-        self.app_time.elapsed().as_secs_f64()
+    pub fn time(&self) -> Duration {
+        self.app_time.elapsed()
     }
 
     /// Adds a line of text to the overlay. The overlay text is cleared on every frame.
-    #[cfg(feature="ttf")]
+    #[cfg(feature = "ttf")]
     pub fn overlay_push(&mut self, text: impl Into<String>) {
         self.overlay.push(text.into());
     }
@@ -414,17 +433,15 @@ impl App {
     /// if frame rate limiting is required. Ironically, performing this idle loop may *lower* the CPU
     /// use in some platforms, compared to pure VSync!
     pub fn frame_finish(&mut self) -> SdlResult {
-        if self.app_time.elapsed().as_secs_f32() > 1.0 { // Skips the first second
-            self.update_time_buffer.push(self
-                .frame_start
-                .elapsed()
-                .as_secs_f64()
-                .clamp(0.0, 1.0)
-            );
+        if self.app_time.elapsed().as_secs_f32() > 1.0 {
+            // Skips the first second
+            self.update_time_buffer
+                .push(self.frame_start.elapsed().as_secs_f64().clamp(0.0, 1.0));
         }
 
         // Overlay
-        #[cfg(feature="ttf")]{
+        #[cfg(feature = "ttf")]
+        {
             if self.display_overlay {
                 if let Some(font) = &mut self.default_font {
                     // self.canvas.set_draw_color((255, 255, 255, 255));
@@ -437,7 +454,8 @@ impl App {
                             self.overlay_scale,
                             &mut self.canvas,
                         )?;
-                        let inc = (font.height() as f32 * self.overlay_line_spacing) * self.overlay_scale;
+                        let inc =
+                            (font.height() as f32 * self.overlay_line_spacing) * self.overlay_scale;
                         y += inc as i32;
                     }
                 }

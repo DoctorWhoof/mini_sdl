@@ -28,7 +28,7 @@ fn main() -> SdlResult {
         let current_time = app.time();
         let time_delta = current_time - last_time;
         last_time = current_time;
-        let samples_per_frame = (time_delta * rate).round() as usize;
+        let samples_per_frame = (time_delta.as_secs_f64() * rate).round() as usize;
         // println!("Generating {} stereo samples per frame", samples_per_frame);
         // Sine wave generation
         for _ in 0..samples_per_frame {
