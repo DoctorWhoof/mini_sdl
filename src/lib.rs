@@ -5,7 +5,7 @@ mod gamepad;
 mod scaling;
 mod timing;
 
-pub use smooth_buffer::Num;
+pub use smooth_buffer::{Num, Float};
 pub use smooth_buffer::SmoothBuffer;
 
 pub use audio::{AudioInput, StereoFrame};
