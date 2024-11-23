@@ -5,8 +5,8 @@ mod gamepad;
 mod scaling;
 mod timing;
 
-pub use smooth_buffer::Float;
-use smooth_buffer::SmoothBuffer;
+pub use smooth_buffer::Num;
+pub use smooth_buffer::SmoothBuffer;
 
 pub use audio::{AudioInput, StereoFrame};
 pub use gamepad::{Button, GamePad};
@@ -83,7 +83,7 @@ pub struct App {
     app_time: Instant,
     last_second: Instant,
     frame_start: Instant,
-    update_time_buffer: SmoothBuffer<120, f64>,
+    update_time_buffer: SmoothBuffer<60, f64>,
     elapsed_time: f64,     // Whole frame time at current FPS.
     elapsed_time_raw: f64, // Elapsed time without quantizing and smoothing.
     // Overlay
