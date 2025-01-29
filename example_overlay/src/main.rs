@@ -11,6 +11,8 @@ fn main() -> SdlResult {
         48000
     )?;
 
+    sdl2::hint::set("SDL_RENDER_SCALE_QUALITY", "0"); // Sharp pixels
+
     app.default_font = Some(
         app.font_load("example_overlay/src/classic-display/classic-display.ttf", 16)?
     );

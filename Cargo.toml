@@ -9,6 +9,7 @@ documentation = "https://docs.rs/mini_sdl/latest/mini_sdl/"
 
 [dependencies]
 smooth-buffer = "0.3.1"
+gamepad = {path = "../gamepad"}
 
 [dependencies.sdl2]
 version = "0.37.0"
