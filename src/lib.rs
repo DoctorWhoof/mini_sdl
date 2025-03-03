@@ -11,7 +11,7 @@ pub use smooth_buffer::SmoothBuffer;
 pub use smooth_buffer::{Float, Num};
 
 pub use audio::{AudioInput, StereoFrame};
-pub use gamepad::GamePad;
+pub use gamepad::{Button, GamePad};
 pub use scaling::Scaling;
 
 pub use sdl2;
@@ -69,7 +69,7 @@ pub struct App {
     /// Cache for the event pump
     pub events: EventPump,
     /// Player 1 controller
-    pub controller_1: GameController,
+    pub controller_1: Option<GameController>,
     /// The SDL TTF context
     #[cfg(feature = "ttf")]
     pub fonts: sdl2::ttf::Sdl2TtfContext,
@@ -147,24 +147,23 @@ impl App {
         println!("MiniSDL: {} joysticks available", available);
 
         // Iterate over all available joysticks and look for game controllers.
-        let controller_1 = (0..available)
-            .find_map(|id| {
-                if !game_controller_subsystem.is_game_controller(id) {
-                    println!("MiniSDL: {} is not a game controller", id);
-                    return None;
+        let controller_1 = (0..available).find_map(|id| {
+            if !game_controller_subsystem.is_game_controller(id) {
+                println!("MiniSDL: {} is not a game controller", id);
+                return None;
+            }
+            match game_controller_subsystem.open(id) {
+                Ok(c) => {
+                    println!("MiniSDL: Opened joystick {} as \"{}\"", id, c.name());
+                    Some(c)
                 }
-                match game_controller_subsystem.open(id) {
-                    Ok(c) => {
-                        println!("MiniSDL: Opened joystick {} as \"{}\"", id, c.name());
-                        Some(c)
-                    }
-                    Err(e) => {
-                        println!("MiniSDL: Failed to open joystick: {:?}", e);
-                        None
-                    }
+                Err(e) => {
+                    println!("MiniSDL: Failed to open joystick: {:?}", e);
+                    None
                 }
-            })
-            .expect("MiniSDL: Couldn't open any controller");
+            }
+        });
+        // .expect("MiniSDL: Couldn't open any controller");
         // println!("Controller mapping: {:#?}", controller.mapping());
 
         let window = video_subsystem
@@ -345,9 +344,32 @@ impl App {
             use gamepad::Button as butt;
             use sdl2::controller::Button::*;
             match event {
-                // Event::ControllerAxisMotion { axis, .. } => {
-                //     println!("Axis {:?}", axis);
-                // }
+                Event::ControllerAxisMotion { axis, timestamp: _, which: _, value } => {
+                    use sdl2::controller::Axis::*;
+                    const AXIS_DEAD_ZONE: i16 = 8000;
+                    match axis {
+                        LeftX => {
+                            self.gamepad.set_state(butt::Left, value < -AXIS_DEAD_ZONE);
+                            self.gamepad.set_state(butt::Right, value > AXIS_DEAD_ZONE);
+                        },
+                        LeftY => {
+                            self.gamepad.set_state(butt::Up, value < -AXIS_DEAD_ZONE);
+                            self.gamepad.set_state(butt::Down, value > AXIS_DEAD_ZONE);
+                        },
+                        RightX => {
+                            // Could map to additional directional controls if needed
+                        },
+                        RightY => {
+                            // Could map to additional directional controls if needed
+                        },
+                        TriggerLeft => {
+                            self.gamepad.set_state(butt::LeftTrigger, value > AXIS_DEAD_ZONE);
+                        },
+                        TriggerRight => {
+                            self.gamepad.set_state(butt::RightTrigger, value > AXIS_DEAD_ZONE);
+                        },
+                    }
+                }
                 Event::ControllerButtonDown { button, .. } => match button {
                     DPadUp => self.gamepad.set_state(butt::Up, true),
                     DPadDown => self.gamepad.set_state(butt::Down, true),
@@ -357,9 +379,9 @@ impl App {
                     B => self.gamepad.set_state(butt::B, true),
                     X => self.gamepad.set_state(butt::X, true),
                     Y => self.gamepad.set_state(butt::Y, true),
-                    LeftStick => self.gamepad.set_state(butt::LeftTrigger, true),
+                    // LeftStick => self.gamepad.set_state(butt::LeftTrigger, true),
                     LeftShoulder => self.gamepad.set_state(butt::LeftShoulder, true),
-                    RightStick => self.gamepad.set_state(butt::RightTrigger, true),
+                    // RightStick => self.gamepad.set_state(butt::RightTrigger, true),
                     RightShoulder => self.gamepad.set_state(butt::RightShoulder, true),
                     Guide => self.gamepad.set_state(butt::Menu, true),
                     Start => self.gamepad.set_state(butt::Start, true),
@@ -385,7 +407,10 @@ impl App {
                     _ => {}
                 },
                 Event::KeyDown {
-                    keycode, repeat, keymod, ..
+                    keycode,
+                    repeat,
+                    keymod,
+                    ..
                 } => {
                     if repeat {
                         continue;
