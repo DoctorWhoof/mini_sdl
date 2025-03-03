@@ -4,11 +4,14 @@ mod audio;
 mod scaling;
 mod timing;
 
+use sdl2::controller::GameController;
+use sdl2::keyboard::Mod;
+use sdl2::EventPump;
 pub use smooth_buffer::SmoothBuffer;
 pub use smooth_buffer::{Float, Num};
 
 pub use audio::{AudioInput, StereoFrame};
-pub use gamepad::{Button, GamePad};
+pub use gamepad::GamePad;
 pub use scaling::Scaling;
 
 pub use sdl2;
@@ -63,6 +66,10 @@ pub struct App {
     pub texture_creator: TextureCreator<WindowContext>,
     /// The internal SDL context.
     pub context: Sdl,
+    /// Cache for the event pump
+    pub events: EventPump,
+    /// Player 1 controller
+    pub controller_1: GameController,
     /// The SDL TTF context
     #[cfg(feature = "ttf")]
     pub fonts: sdl2::ttf::Sdl2TtfContext,
@@ -128,8 +135,38 @@ impl App {
         scaling: Scaling,
         sample_rate: u32,
     ) -> Result<Self, String> {
+        sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
+
         let context = sdl2::init()?;
         let video_subsystem = context.video()?;
+
+        let game_controller_subsystem = context.game_controller()?;
+        let available = game_controller_subsystem
+            .num_joysticks()
+            .map_err(|e| format!("MiniSDL: Can't enumerate joysticks: {}", e))?;
+        println!("MiniSDL: {} joysticks available", available);
+
+        // Iterate over all available joysticks and look for game controllers.
+        let controller_1 = (0..available)
+            .find_map(|id| {
+                if !game_controller_subsystem.is_game_controller(id) {
+                    println!("MiniSDL: {} is not a game controller", id);
+                    return None;
+                }
+                match game_controller_subsystem.open(id) {
+                    Ok(c) => {
+                        println!("MiniSDL: Opened joystick {} as \"{}\"", id, c.name());
+                        Some(c)
+                    }
+                    Err(e) => {
+                        println!("MiniSDL: Failed to open joystick: {:?}", e);
+                        None
+                    }
+                }
+            })
+            .expect("MiniSDL: Couldn't open any controller");
+        // println!("Controller mapping: {:#?}", controller.mapping());
+
         let window = video_subsystem
             .window(name, width * 2, height * 2)
             .allow_highdpi()
@@ -198,6 +235,8 @@ impl App {
             AudioInput::new(sample_count)
         })?;
 
+        let events = context.event_pump()?;
+
         Ok(Self {
             quit_requested: false,
             gamepad: GamePad::new(),
@@ -208,7 +247,7 @@ impl App {
             app_time: Instant::now(),
             last_second: Instant::now(),
             frame_start: Instant::now(),
-            update_time_buffer: SmoothBuffer::pre_filled(0.0),
+            update_time_buffer: SmoothBuffer::pre_filled(1.0 / 120.0),
             elapsed_time: 0.0,
             elapsed_time_raw: 0.0,
             width,
@@ -220,6 +259,8 @@ impl App {
             render_texture,
             render_target,
             context,
+            events,
+            controller_1,
             texture_creator,
             sample_rate,
             audio_device,
@@ -286,61 +327,91 @@ impl App {
     /// Required at the start of a frame loop, performs basic timing math, clears the canvas and
     /// updates self.gamepad with the current values.
     pub fn frame_start(&mut self) -> SdlResult {
-        // Whole frame time. Quantized to a minimum interval
+        // Whole frame time.
         self.elapsed_time_raw = self.frame_start.elapsed().as_secs_f64();
         self.elapsed_time = match self.timing {
             Timing::Vsync | Timing::VsyncLimitFPS(_) => {
+                // Quantized to a minimum interval to ensure it exactly matches the display
                 quantize(self.elapsed_time_raw, ELAPSED_QUANT_SIZE)
             }
             Timing::Immediate | Timing::ImmediateLimitFPS(_) => self.elapsed_time_raw,
         };
-
         self.frame_start = Instant::now();
 
-        // match self.timing {
-        //     Timing::VsyncLimitFPS(limit) | Timing::ImmediateLimitFPS(limit) => {
-        //         let elapsed_limit = 1.0 / limit;
-        //         self.elapsed_time = self.elapsed_time.clamp(elapsed_limit, 1.0);
-        //     }
-        //     _ => {}
-        // }
-
-        // Detects new second, prints FPS
-        if let Some(interval) = self.print_fps_interval {
-            if self.last_second.elapsed().as_secs_f32() > interval {
-                self.last_second = Instant::now();
-                println!("FPS: {:.1}", (1.0 / self.elapsed_time));
-            }
-        }
-
+        // Input
         self.gamepad.copy_current_to_previous_state();
-        for event in self.context.event_pump()?.poll_iter() {
-            use Button::*;
+
+        for event in self.events.poll_iter() {
+            use gamepad::Button as butt;
+            use sdl2::controller::Button::*;
             match event {
-                Event::Quit { .. } => self.quit_requested = true,
+                // Event::ControllerAxisMotion { axis, .. } => {
+                //     println!("Axis {:?}", axis);
+                // }
+                Event::ControllerButtonDown { button, .. } => match button {
+                    DPadUp => self.gamepad.set_state(butt::Up, true),
+                    DPadDown => self.gamepad.set_state(butt::Down, true),
+                    DPadLeft => self.gamepad.set_state(butt::Left, true),
+                    DPadRight => self.gamepad.set_state(butt::Right, true),
+                    A => self.gamepad.set_state(butt::A, true),
+                    B => self.gamepad.set_state(butt::B, true),
+                    X => self.gamepad.set_state(butt::X, true),
+                    Y => self.gamepad.set_state(butt::Y, true),
+                    LeftStick => self.gamepad.set_state(butt::LeftTrigger, true),
+                    LeftShoulder => self.gamepad.set_state(butt::LeftShoulder, true),
+                    RightStick => self.gamepad.set_state(butt::RightTrigger, true),
+                    RightShoulder => self.gamepad.set_state(butt::RightShoulder, true),
+                    Guide => self.gamepad.set_state(butt::Menu, true),
+                    Start => self.gamepad.set_state(butt::Start, true),
+                    Back => self.gamepad.set_state(butt::Select, true),
+                    _ => {}
+                },
+                Event::ControllerButtonUp { button, .. } => match button {
+                    DPadUp => self.gamepad.set_state(butt::Up, false),
+                    DPadDown => self.gamepad.set_state(butt::Down, false),
+                    DPadLeft => self.gamepad.set_state(butt::Left, false),
+                    DPadRight => self.gamepad.set_state(butt::Right, false),
+                    A => self.gamepad.set_state(butt::A, false),
+                    B => self.gamepad.set_state(butt::B, false),
+                    X => self.gamepad.set_state(butt::X, false),
+                    Y => self.gamepad.set_state(butt::Y, false),
+                    LeftStick => self.gamepad.set_state(butt::LeftTrigger, false),
+                    LeftShoulder => self.gamepad.set_state(butt::LeftShoulder, false),
+                    RightStick => self.gamepad.set_state(butt::RightTrigger, false),
+                    RightShoulder => self.gamepad.set_state(butt::RightShoulder, false),
+                    Guide => self.gamepad.set_state(butt::Menu, false),
+                    Start => self.gamepad.set_state(butt::Start, false),
+                    Back => self.gamepad.set_state(butt::Select, false),
+                    _ => {}
+                },
                 Event::KeyDown {
-                    keycode, repeat, ..
+                    keycode, repeat, keymod, ..
                 } => {
                     if repeat {
                         continue;
                     }
                     match keycode {
                         Option::None => {}
-                        Some(Keycode::Up) => self.gamepad.set_current_state(Up, true),
-                        Some(Keycode::Down) => self.gamepad.set_current_state(Down, true),
-                        Some(Keycode::Left) => self.gamepad.set_current_state(Left, true),
-                        Some(Keycode::Right) => self.gamepad.set_current_state(Right, true),
-                        Some(Keycode::X) => self.gamepad.set_current_state(A, true),
-                        Some(Keycode::Z) => self.gamepad.set_current_state(B, true),
-                        Some(Keycode::S) => self.gamepad.set_current_state(X, true),
-                        Some(Keycode::A) => self.gamepad.set_current_state(Y, true),
-                        Some(Keycode::NUM_1) => self.gamepad.set_current_state(LeftTrigger, true),
-                        Some(Keycode::Q) => self.gamepad.set_current_state(LeftShoulder, true),
-                        Some(Keycode::NUM_2) => self.gamepad.set_current_state(RightTrigger, true),
-                        Some(Keycode::W) => self.gamepad.set_current_state(RightShoulder, true),
-                        Some(Keycode::TAB) => self.gamepad.set_current_state(Select, true),
-                        Some(Keycode::RETURN) => self.gamepad.set_current_state(Start, true),
-                        Some(Keycode::ESCAPE) => self.gamepad.set_current_state(Menu, true),
+                        Some(Keycode::Up) => self.gamepad.set_state(butt::Up, true),
+                        Some(Keycode::Down) => self.gamepad.set_state(butt::Down, true),
+                        Some(Keycode::Left) => self.gamepad.set_state(butt::Left, true),
+                        Some(Keycode::Right) => self.gamepad.set_state(butt::Right, true),
+                        Some(Keycode::X) => self.gamepad.set_state(butt::A, true),
+                        Some(Keycode::S) => self.gamepad.set_state(butt::B, true),
+                        Some(Keycode::Z) => self.gamepad.set_state(butt::X, true),
+                        Some(Keycode::A) => self.gamepad.set_state(butt::Y, true),
+                        Some(Keycode::NUM_1) => self.gamepad.set_state(butt::LeftTrigger, true),
+                        Some(Keycode::Q) => self.gamepad.set_state(butt::LeftShoulder, true),
+                        Some(Keycode::NUM_2) => self.gamepad.set_state(butt::RightTrigger, true),
+                        Some(Keycode::W) => self.gamepad.set_state(butt::RightShoulder, true),
+                        Some(Keycode::TAB) => self.gamepad.set_state(butt::Select, true),
+                        Some(Keycode::RETURN) => self.gamepad.set_state(butt::Start, true),
+                        Some(Keycode::ESCAPE) => self.gamepad.set_state(butt::Menu, true),
+                        Some(Keycode::O) => {
+                            if keymod == Mod::LCTRLMOD {
+                                self.display_overlay = !self.display_overlay
+                            }
+                        }
                         Some(_) => {} // ignore the rest
                     }
                 }
@@ -352,24 +423,25 @@ impl App {
                     }
                     match keycode {
                         Option::None => {}
-                        Some(Keycode::Up) => self.gamepad.set_current_state(Up, false),
-                        Some(Keycode::Down) => self.gamepad.set_current_state(Down, false),
-                        Some(Keycode::Left) => self.gamepad.set_current_state(Left, false),
-                        Some(Keycode::Right) => self.gamepad.set_current_state(Right, false),
-                        Some(Keycode::X) => self.gamepad.set_current_state(A, false),
-                        Some(Keycode::Z) => self.gamepad.set_current_state(B, false),
-                        Some(Keycode::S) => self.gamepad.set_current_state(X, false),
-                        Some(Keycode::A) => self.gamepad.set_current_state(Y, false),
-                        Some(Keycode::NUM_1) => self.gamepad.set_current_state(LeftTrigger, false),
-                        Some(Keycode::Q) => self.gamepad.set_current_state(LeftShoulder, false),
-                        Some(Keycode::NUM_2) => self.gamepad.set_current_state(RightTrigger, false),
-                        Some(Keycode::W) => self.gamepad.set_current_state(RightShoulder, false),
-                        Some(Keycode::TAB) => self.gamepad.set_current_state(Select, false),
-                        Some(Keycode::RETURN) => self.gamepad.set_current_state(Start, false),
-                        Some(Keycode::ESCAPE) => self.gamepad.set_current_state(Menu, false),
+                        Some(Keycode::Up) => self.gamepad.set_state(butt::Up, false),
+                        Some(Keycode::Down) => self.gamepad.set_state(butt::Down, false),
+                        Some(Keycode::Left) => self.gamepad.set_state(butt::Left, false),
+                        Some(Keycode::Right) => self.gamepad.set_state(butt::Right, false),
+                        Some(Keycode::X) => self.gamepad.set_state(butt::A, false),
+                        Some(Keycode::S) => self.gamepad.set_state(butt::B, false),
+                        Some(Keycode::Z) => self.gamepad.set_state(butt::X, false),
+                        Some(Keycode::A) => self.gamepad.set_state(butt::Y, false),
+                        Some(Keycode::NUM_1) => self.gamepad.set_state(butt::LeftTrigger, false),
+                        Some(Keycode::Q) => self.gamepad.set_state(butt::LeftShoulder, false),
+                        Some(Keycode::NUM_2) => self.gamepad.set_state(butt::RightTrigger, false),
+                        Some(Keycode::W) => self.gamepad.set_state(butt::RightShoulder, false),
+                        Some(Keycode::TAB) => self.gamepad.set_state(butt::Select, false),
+                        Some(Keycode::RETURN) => self.gamepad.set_state(butt::Start, false),
+                        Some(Keycode::ESCAPE) => self.gamepad.set_state(butt::Menu, false),
                         Some(_) => {} // ignore the rest
                     }
                 }
+                Event::Quit { .. } => self.quit_requested = true,
                 _ => {}
             }
         }
@@ -436,10 +508,10 @@ impl App {
     /// if frame rate limiting is required. Ironically, performing this idle loop may *lower* the CPU
     /// use in some platforms, compared to pure VSync!
     pub fn frame_finish(&mut self) -> SdlResult {
-        if self.app_time.elapsed().as_secs_f32() > 1.0 {
-            // Skips the first second
+        if self.app_time.elapsed().as_secs_f32() > 0.5 {
+            // Skips the first frames
             self.update_time_buffer
-                .push(self.frame_start.elapsed().as_secs_f64().clamp(0.0, 1.0));
+                .push(self.frame_start.elapsed().as_secs_f64());
         }
 
         // Overlay
@@ -465,17 +537,28 @@ impl App {
             }
         }
 
-        const LARGE_STEP: f64 = 1.0 / 1000.0; // 1ms
-        const SMALL_STEP: f64 = 2.0 / 10000.0; // 0.2ms
+        // TESTING: Moved here from end of function, right before the "Ok(())"
+        self.canvas.present();
+
         match self.timing {
             // Optional FPS limiting
             Timing::VsyncLimitFPS(fps_limit) | Timing::ImmediateLimitFPS(fps_limit) => {
+                // let update_so_far = self.frame_start.elapsed().as_secs_f64();
+                // let target_time = (1.0 / fps_limit);// - 0.0001;
+                // let diff = target_time - update_so_far;
+                // if diff > 0.0 {
+                //     std::thread::sleep(Duration::from_secs_f64(diff));
+                // }
+
+                const LARGE_STEP: f64 = 1.0 / 1000.0; // 1ms
+                const SMALL_STEP: f64 = 1.0 / 10000.0; // 0.1ms
                 let mut update_so_far = self.frame_start.elapsed().as_secs_f64();
-                let target_time = match self.timing {
-                    // Helps to ensure target_time ends just before vsync
-                    Timing::VsyncLimitFPS(_) => (1.0 / fps_limit) - 0.0005,
-                    _ => 1.0 / fps_limit,
-                };
+                let target_time = 1.0 / fps_limit;
+                // match self.timing {
+                //     // Helps to ensure target_time ends just before vsync
+                //     Timing::VsyncLimitFPS(_) => (1.0 / fps_limit) - 0.0001,
+                //     _ => 1.0 / fps_limit,
+                // };
                 while update_so_far < target_time {
                     update_so_far = self.frame_start.elapsed().as_secs_f64();
                     let diff = target_time - update_so_far;
@@ -492,7 +575,14 @@ impl App {
             _ => {}
         };
 
-        self.canvas.present();
+        // Detects new second, prints FPS
+        if let Some(interval) = self.print_fps_interval {
+            if self.last_second.elapsed().as_secs_f32() > interval {
+                self.last_second = Instant::now();
+                println!("FPS: {:.1}", (1.0 / self.elapsed_time));
+            }
+        }
+
         Ok(())
     }
 
