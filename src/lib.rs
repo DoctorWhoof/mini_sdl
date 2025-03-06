@@ -362,7 +362,7 @@ impl App {
                                 self.apad.set_button(butt::Left, value < -AXIS_DEAD_ZONE);
                                 self.apad.set_button(butt::Right, value > AXIS_DEAD_ZONE);
                             } else {
-                                self.apad.set_left_stick_raw_x(value);
+                                self.apad.left_stick_x = value;
                             }
                         }
                         LeftY => {
@@ -370,7 +370,7 @@ impl App {
                                 self.apad.set_button(butt::Up, value < -AXIS_DEAD_ZONE);
                                 self.apad.set_button(butt::Down, value > AXIS_DEAD_ZONE);
                             } else {
-                                self.apad.set_left_stick_raw_y(value);
+                                self.apad.left_stick_y = value;
                           }
                         }
                         RightX => {
