@@ -11,7 +11,7 @@ pub use smooth_buffer::SmoothBuffer;
 pub use smooth_buffer::{Float, Num};
 
 pub use audio::{AudioInput, StereoFrame};
-pub use gamepad::{Button, GamePad};
+pub use padstate::{Button, DPad};
 pub use scaling::Scaling;
 
 pub use sdl2;
@@ -49,7 +49,7 @@ pub struct App {
     /// Set to true to quit App on the next update.
     pub quit_requested: bool,
     /// Tiny struct that contains the state of a virtual Gamepad.
-    pub gamepad: GamePad,
+    pub dpad: DPad,
     /// Minimum sleep time when limiting fps. The smaller it is, the more accurate it will be,
     /// but some platforms (Windows...) seem to struggle with that.
     pub idle_increments_microsecs: u64,
@@ -70,6 +70,8 @@ pub struct App {
     pub events: EventPump,
     /// Player 1 controller
     pub controller_1: Option<GameController>,
+    pub allow_analog_to_dpad_x: bool,
+    pub allow_analog_to_dpad_y: bool,
     /// The SDL TTF context
     #[cfg(feature = "ttf")]
     pub fonts: sdl2::ttf::Sdl2TtfContext,
@@ -238,7 +240,7 @@ impl App {
 
         Ok(Self {
             quit_requested: false,
-            gamepad: GamePad::new(),
+            dpad: DPad::new(),
             idle_increments_microsecs: 100,
             print_fps_interval: None,
             bg_color: (0, 0, 0, 255),
@@ -260,6 +262,8 @@ impl App {
             context,
             events,
             controller_1,
+            allow_analog_to_dpad_x: true,
+            allow_analog_to_dpad_y: true,
             texture_creator,
             sample_rate,
             audio_device,
@@ -324,7 +328,7 @@ impl App {
     }
 
     /// Required at the start of a frame loop, performs basic timing math, clears the canvas and
-    /// updates self.gamepad with the current values.
+    /// updates self.dpad with the current values.
     pub fn frame_start(&mut self) -> SdlResult {
         // Whole frame time.
         self.elapsed_time_raw = self.frame_start.elapsed().as_secs_f64();
@@ -338,72 +342,83 @@ impl App {
         self.frame_start = Instant::now();
 
         // Input
-        self.gamepad.copy_current_to_previous_state();
+        self.dpad.copy_current_to_previous_state();
 
         for event in self.events.poll_iter() {
-            use gamepad::Button as butt;
+            use padstate::Button as butt;
             use sdl2::controller::Button::*;
             match event {
-                Event::ControllerAxisMotion { axis, timestamp: _, which: _, value } => {
+                Event::ControllerAxisMotion {
+                    axis,
+                    timestamp: _,
+                    which: _,
+                    value,
+                } => {
                     use sdl2::controller::Axis::*;
                     const AXIS_DEAD_ZONE: i16 = 8000;
                     match axis {
                         LeftX => {
-                            self.gamepad.set_state(butt::Left, value < -AXIS_DEAD_ZONE);
-                            self.gamepad.set_state(butt::Right, value > AXIS_DEAD_ZONE);
-                        },
+                            if self.allow_analog_to_dpad_x {
+                                self.dpad.set_state(butt::Left, value < -AXIS_DEAD_ZONE);
+                                self.dpad.set_state(butt::Right, value > AXIS_DEAD_ZONE);
+                            }
+                        }
                         LeftY => {
-                            self.gamepad.set_state(butt::Up, value < -AXIS_DEAD_ZONE);
-                            self.gamepad.set_state(butt::Down, value > AXIS_DEAD_ZONE);
-                        },
+                            if self.allow_analog_to_dpad_y {
+                                self.dpad.set_state(butt::Up, value < -AXIS_DEAD_ZONE);
+                                self.dpad.set_state(butt::Down, value > AXIS_DEAD_ZONE);
+                            }
+                        }
                         RightX => {
                             // Could map to additional directional controls if needed
-                        },
+                        }
                         RightY => {
                             // Could map to additional directional controls if needed
-                        },
+                        }
                         TriggerLeft => {
-                            self.gamepad.set_state(butt::LeftTrigger, value > AXIS_DEAD_ZONE);
-                        },
+                            self.dpad
+                                .set_state(butt::LeftTrigger, value > AXIS_DEAD_ZONE);
+                        }
                         TriggerRight => {
-                            self.gamepad.set_state(butt::RightTrigger, value > AXIS_DEAD_ZONE);
-                        },
+                            self.dpad
+                                .set_state(butt::RightTrigger, value > AXIS_DEAD_ZONE);
+                        }
                     }
                 }
                 Event::ControllerButtonDown { button, .. } => match button {
-                    DPadUp => self.gamepad.set_state(butt::Up, true),
-                    DPadDown => self.gamepad.set_state(butt::Down, true),
-                    DPadLeft => self.gamepad.set_state(butt::Left, true),
-                    DPadRight => self.gamepad.set_state(butt::Right, true),
-                    A => self.gamepad.set_state(butt::A, true),
-                    B => self.gamepad.set_state(butt::B, true),
-                    X => self.gamepad.set_state(butt::X, true),
-                    Y => self.gamepad.set_state(butt::Y, true),
-                    // LeftStick => self.gamepad.set_state(butt::LeftTrigger, true),
-                    LeftShoulder => self.gamepad.set_state(butt::LeftShoulder, true),
-                    // RightStick => self.gamepad.set_state(butt::RightTrigger, true),
-                    RightShoulder => self.gamepad.set_state(butt::RightShoulder, true),
-                    Guide => self.gamepad.set_state(butt::Menu, true),
-                    Start => self.gamepad.set_state(butt::Start, true),
-                    Back => self.gamepad.set_state(butt::Select, true),
+                    DPadUp => self.dpad.set_state(butt::Up, true),
+                    DPadDown => self.dpad.set_state(butt::Down, true),
+                    DPadLeft => self.dpad.set_state(butt::Left, true),
+                    DPadRight => self.dpad.set_state(butt::Right, true),
+                    A => self.dpad.set_state(butt::A, true),
+                    B => self.dpad.set_state(butt::B, true),
+                    X => self.dpad.set_state(butt::X, true),
+                    Y => self.dpad.set_state(butt::Y, true),
+                    // LeftStick => self.dpad.set_state(butt::LeftTrigger, true),
+                    LeftShoulder => self.dpad.set_state(butt::LeftShoulder, true),
+                    // RightStick => self.dpad.set_state(butt::RightTrigger, true),
+                    RightShoulder => self.dpad.set_state(butt::RightShoulder, true),
+                    Guide => self.dpad.set_state(butt::Menu, true),
+                    Start => self.dpad.set_state(butt::Start, true),
+                    Back => self.dpad.set_state(butt::Select, true),
                     _ => {}
                 },
                 Event::ControllerButtonUp { button, .. } => match button {
-                    DPadUp => self.gamepad.set_state(butt::Up, false),
-                    DPadDown => self.gamepad.set_state(butt::Down, false),
-                    DPadLeft => self.gamepad.set_state(butt::Left, false),
-                    DPadRight => self.gamepad.set_state(butt::Right, false),
-                    A => self.gamepad.set_state(butt::A, false),
-                    B => self.gamepad.set_state(butt::B, false),
-                    X => self.gamepad.set_state(butt::X, false),
-                    Y => self.gamepad.set_state(butt::Y, false),
-                    LeftStick => self.gamepad.set_state(butt::LeftTrigger, false),
-                    LeftShoulder => self.gamepad.set_state(butt::LeftShoulder, false),
-                    RightStick => self.gamepad.set_state(butt::RightTrigger, false),
-                    RightShoulder => self.gamepad.set_state(butt::RightShoulder, false),
-                    Guide => self.gamepad.set_state(butt::Menu, false),
-                    Start => self.gamepad.set_state(butt::Start, false),
-                    Back => self.gamepad.set_state(butt::Select, false),
+                    DPadUp => self.dpad.set_state(butt::Up, false),
+                    DPadDown => self.dpad.set_state(butt::Down, false),
+                    DPadLeft => self.dpad.set_state(butt::Left, false),
+                    DPadRight => self.dpad.set_state(butt::Right, false),
+                    A => self.dpad.set_state(butt::A, false),
+                    B => self.dpad.set_state(butt::B, false),
+                    X => self.dpad.set_state(butt::X, false),
+                    Y => self.dpad.set_state(butt::Y, false),
+                    LeftStick => self.dpad.set_state(butt::LeftTrigger, false),
+                    LeftShoulder => self.dpad.set_state(butt::LeftShoulder, false),
+                    RightStick => self.dpad.set_state(butt::RightTrigger, false),
+                    RightShoulder => self.dpad.set_state(butt::RightShoulder, false),
+                    Guide => self.dpad.set_state(butt::Menu, false),
+                    Start => self.dpad.set_state(butt::Start, false),
+                    Back => self.dpad.set_state(butt::Select, false),
                     _ => {}
                 },
                 Event::KeyDown {
@@ -417,21 +432,21 @@ impl App {
                     }
                     match keycode {
                         Option::None => {}
-                        Some(Keycode::Up) => self.gamepad.set_state(butt::Up, true),
-                        Some(Keycode::Down) => self.gamepad.set_state(butt::Down, true),
-                        Some(Keycode::Left) => self.gamepad.set_state(butt::Left, true),
-                        Some(Keycode::Right) => self.gamepad.set_state(butt::Right, true),
-                        Some(Keycode::X) => self.gamepad.set_state(butt::A, true),
-                        Some(Keycode::S) => self.gamepad.set_state(butt::B, true),
-                        Some(Keycode::Z) => self.gamepad.set_state(butt::X, true),
-                        Some(Keycode::A) => self.gamepad.set_state(butt::Y, true),
-                        Some(Keycode::NUM_1) => self.gamepad.set_state(butt::LeftTrigger, true),
-                        Some(Keycode::Q) => self.gamepad.set_state(butt::LeftShoulder, true),
-                        Some(Keycode::NUM_2) => self.gamepad.set_state(butt::RightTrigger, true),
-                        Some(Keycode::W) => self.gamepad.set_state(butt::RightShoulder, true),
-                        Some(Keycode::TAB) => self.gamepad.set_state(butt::Select, true),
-                        Some(Keycode::RETURN) => self.gamepad.set_state(butt::Start, true),
-                        Some(Keycode::ESCAPE) => self.gamepad.set_state(butt::Menu, true),
+                        Some(Keycode::Up) => self.dpad.set_state(butt::Up, true),
+                        Some(Keycode::Down) => self.dpad.set_state(butt::Down, true),
+                        Some(Keycode::Left) => self.dpad.set_state(butt::Left, true),
+                        Some(Keycode::Right) => self.dpad.set_state(butt::Right, true),
+                        Some(Keycode::X) => self.dpad.set_state(butt::A, true),
+                        Some(Keycode::S) => self.dpad.set_state(butt::B, true),
+                        Some(Keycode::Z) => self.dpad.set_state(butt::X, true),
+                        Some(Keycode::A) => self.dpad.set_state(butt::Y, true),
+                        Some(Keycode::NUM_1) => self.dpad.set_state(butt::LeftTrigger, true),
+                        Some(Keycode::Q) => self.dpad.set_state(butt::LeftShoulder, true),
+                        Some(Keycode::NUM_2) => self.dpad.set_state(butt::RightTrigger, true),
+                        Some(Keycode::W) => self.dpad.set_state(butt::RightShoulder, true),
+                        Some(Keycode::TAB) => self.dpad.set_state(butt::Select, true),
+                        Some(Keycode::RETURN) => self.dpad.set_state(butt::Start, true),
+                        Some(Keycode::ESCAPE) => self.dpad.set_state(butt::Menu, true),
                         Some(Keycode::O) => {
                             if keymod == Mod::LCTRLMOD {
                                 self.display_overlay = !self.display_overlay
@@ -448,21 +463,21 @@ impl App {
                     }
                     match keycode {
                         Option::None => {}
-                        Some(Keycode::Up) => self.gamepad.set_state(butt::Up, false),
-                        Some(Keycode::Down) => self.gamepad.set_state(butt::Down, false),
-                        Some(Keycode::Left) => self.gamepad.set_state(butt::Left, false),
-                        Some(Keycode::Right) => self.gamepad.set_state(butt::Right, false),
-                        Some(Keycode::X) => self.gamepad.set_state(butt::A, false),
-                        Some(Keycode::S) => self.gamepad.set_state(butt::B, false),
-                        Some(Keycode::Z) => self.gamepad.set_state(butt::X, false),
-                        Some(Keycode::A) => self.gamepad.set_state(butt::Y, false),
-                        Some(Keycode::NUM_1) => self.gamepad.set_state(butt::LeftTrigger, false),
-                        Some(Keycode::Q) => self.gamepad.set_state(butt::LeftShoulder, false),
-                        Some(Keycode::NUM_2) => self.gamepad.set_state(butt::RightTrigger, false),
-                        Some(Keycode::W) => self.gamepad.set_state(butt::RightShoulder, false),
-                        Some(Keycode::TAB) => self.gamepad.set_state(butt::Select, false),
-                        Some(Keycode::RETURN) => self.gamepad.set_state(butt::Start, false),
-                        Some(Keycode::ESCAPE) => self.gamepad.set_state(butt::Menu, false),
+                        Some(Keycode::Up) => self.dpad.set_state(butt::Up, false),
+                        Some(Keycode::Down) => self.dpad.set_state(butt::Down, false),
+                        Some(Keycode::Left) => self.dpad.set_state(butt::Left, false),
+                        Some(Keycode::Right) => self.dpad.set_state(butt::Right, false),
+                        Some(Keycode::X) => self.dpad.set_state(butt::A, false),
+                        Some(Keycode::S) => self.dpad.set_state(butt::B, false),
+                        Some(Keycode::Z) => self.dpad.set_state(butt::X, false),
+                        Some(Keycode::A) => self.dpad.set_state(butt::Y, false),
+                        Some(Keycode::NUM_1) => self.dpad.set_state(butt::LeftTrigger, false),
+                        Some(Keycode::Q) => self.dpad.set_state(butt::LeftShoulder, false),
+                        Some(Keycode::NUM_2) => self.dpad.set_state(butt::RightTrigger, false),
+                        Some(Keycode::W) => self.dpad.set_state(butt::RightShoulder, false),
+                        Some(Keycode::TAB) => self.dpad.set_state(butt::Select, false),
+                        Some(Keycode::RETURN) => self.dpad.set_state(butt::Start, false),
+                        Some(Keycode::ESCAPE) => self.dpad.set_state(butt::Menu, false),
                         Some(_) => {} // ignore the rest
                     }
                 }

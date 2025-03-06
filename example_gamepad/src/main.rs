@@ -22,10 +22,10 @@ fn main() -> SdlResult {
         app.frame_start()?;
 
         // Test "just_pressed" and "just_released"
-        if app.gamepad.is_just_pressed(Button::A) {
+        if app.dpad.is_just_pressed(Button::A) {
             println!("A just pressed");
         }
-        if app.gamepad.is_just_released(Button::A) {
+        if app.dpad.is_just_released(Button::A) {
             println!("A just released");
         }
 
@@ -35,8 +35,8 @@ fn main() -> SdlResult {
         let mut state: u16 = 0b_0000_0000_0000_0001;
         // The we iterate all bits to the left, each one stores a different button's state
         for _ in 0..16 {
-            // Compare to actual gamepad state
-            if state & app.gamepad.state() != 0 {
+            // Compare to actual dpad state
+            if state & app.dpad.state() != 0 {
                 buttons.push(Button::from(state))
             }
             // But shift to the left for the next iteration
