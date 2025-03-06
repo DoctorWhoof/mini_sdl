@@ -8,7 +8,7 @@ repository = "https://github.com/DoctorWhoof/mini_sdl.git"
 documentation = "https://docs.rs/mini_sdl/latest/mini_sdl/"
 
 [dependencies]
-padstate = "0.2.0"
+padstate = "0.2.1"
 smooth-buffer = "0.3.1"
 
 [dependencies.sdl2]

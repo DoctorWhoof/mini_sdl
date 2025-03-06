@@ -30,7 +30,6 @@ use sdl2::{
     pixels::PixelFormatEnum,
     rect::Rect,
     render::{Canvas, Texture, TextureAccess, TextureCreator},
-    // ttf::Sdl2TtfContext,
     video::{Window, WindowContext},
     Sdl,
 };
