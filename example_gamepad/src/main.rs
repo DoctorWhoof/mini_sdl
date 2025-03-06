@@ -22,10 +22,10 @@ fn main() -> SdlResult {
         app.frame_start()?;
 
         // Test "just_pressed" and "just_released"
-        if app.dpad.is_just_pressed(Button::A) {
+        if app.apad.is_just_pressed(Button::A) {
             println!("A just pressed");
         }
-        if app.dpad.is_just_released(Button::A) {
+        if app.apad.is_just_released(Button::A) {
             println!("A just released");
         }
 
@@ -36,7 +36,7 @@ fn main() -> SdlResult {
         // The we iterate all bits to the left, each one stores a different button's state
         for _ in 0..16 {
             // Compare to actual dpad state
-            if state & app.dpad.state() != 0 {
+            if state & app.apad.buttons() != 0 {
                 buttons.push(Button::from(state))
             }
             // But shift to the left for the next iteration
@@ -50,12 +50,26 @@ fn main() -> SdlResult {
                 target.clear();
                 target.set_draw_color((0, 0, 0, 255));
                 font.color = Color::RGB(245, 250, 255);
-                // Text
+
+                // Buttons
                 let mut y = 22;
                 font.draw("Current buttons:", 20, y, 2.0, target).ok();
                 for button in &buttons {
                     y += 22;
                     font.draw(format!("{:?}", button), 20, y, 2.0, target).ok();
+                }
+
+                // Left stick
+                let dead_zone = 0.05;
+                let stick_x = app.apad.left_stick_x();
+                if stick_x > dead_zone || stick_x < -dead_zone {
+                    y += 22;
+                    font.draw(format!("Stick X: {:1?}", stick_x), 20, y, 2.0, target).ok();
+                }
+                let stick_y = app.apad.left_stick_y();
+                if stick_y > dead_zone || stick_y < -dead_zone {
+                    y += 22;
+                    font.draw(format!("Stick Y: {:1?}", stick_y), 20, y, 2.0, target).ok();
                 }
             })
             .map_err(|e| e.to_string())?;

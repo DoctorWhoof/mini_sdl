@@ -7,11 +7,12 @@ mod timing;
 use sdl2::controller::GameController;
 use sdl2::keyboard::Mod;
 use sdl2::EventPump;
+
 pub use smooth_buffer::SmoothBuffer;
 pub use smooth_buffer::{Float, Num};
 
 pub use audio::{AudioInput, StereoFrame};
-pub use padstate::{Button, DPad};
+pub use padstate::{Button, APad};
 pub use scaling::Scaling;
 
 pub use sdl2;
@@ -49,7 +50,7 @@ pub struct App {
     /// Set to true to quit App on the next update.
     pub quit_requested: bool,
     /// Tiny struct that contains the state of a virtual Gamepad.
-    pub dpad: DPad,
+    pub apad: APad,
     /// Minimum sleep time when limiting fps. The smaller it is, the more accurate it will be,
     /// but some platforms (Windows...) seem to struggle with that.
     pub idle_increments_microsecs: u64,
@@ -240,7 +241,7 @@ impl App {
 
         Ok(Self {
             quit_requested: false,
-            dpad: DPad::new(),
+            apad: APad::new(),
             idle_increments_microsecs: 100,
             print_fps_interval: None,
             bg_color: (0, 0, 0, 255),
@@ -262,8 +263,8 @@ impl App {
             context,
             events,
             controller_1,
-            allow_analog_to_dpad_x: true,
-            allow_analog_to_dpad_y: true,
+            allow_analog_to_dpad_x: false,
+            allow_analog_to_dpad_y: false,
             texture_creator,
             sample_rate,
             audio_device,
@@ -328,7 +329,7 @@ impl App {
     }
 
     /// Required at the start of a frame loop, performs basic timing math, clears the canvas and
-    /// updates self.dpad with the current values.
+    /// updates self.apad with the current values.
     pub fn frame_start(&mut self) -> SdlResult {
         // Whole frame time.
         self.elapsed_time_raw = self.frame_start.elapsed().as_secs_f64();
@@ -342,7 +343,7 @@ impl App {
         self.frame_start = Instant::now();
 
         // Input
-        self.dpad.copy_current_to_previous_state();
+        self.apad.copy_current_to_previous_state();
 
         for event in self.events.poll_iter() {
             use padstate::Button as butt;
@@ -359,15 +360,19 @@ impl App {
                     match axis {
                         LeftX => {
                             if self.allow_analog_to_dpad_x {
-                                self.dpad.set_state(butt::Left, value < -AXIS_DEAD_ZONE);
-                                self.dpad.set_state(butt::Right, value > AXIS_DEAD_ZONE);
+                                self.apad.set_button(butt::Left, value < -AXIS_DEAD_ZONE);
+                                self.apad.set_button(butt::Right, value > AXIS_DEAD_ZONE);
+                            } else {
+                                self.apad.set_left_stick_raw_x(value);
                             }
                         }
                         LeftY => {
                             if self.allow_analog_to_dpad_y {
-                                self.dpad.set_state(butt::Up, value < -AXIS_DEAD_ZONE);
-                                self.dpad.set_state(butt::Down, value > AXIS_DEAD_ZONE);
-                            }
+                                self.apad.set_button(butt::Up, value < -AXIS_DEAD_ZONE);
+                                self.apad.set_button(butt::Down, value > AXIS_DEAD_ZONE);
+                            } else {
+                                self.apad.set_left_stick_raw_y(value);
+                          }
                         }
                         RightX => {
                             // Could map to additional directional controls if needed
@@ -376,49 +381,49 @@ impl App {
                             // Could map to additional directional controls if needed
                         }
                         TriggerLeft => {
-                            self.dpad
-                                .set_state(butt::LeftTrigger, value > AXIS_DEAD_ZONE);
+                            self.apad
+                                .set_button(butt::LeftTrigger, value > AXIS_DEAD_ZONE);
                         }
                         TriggerRight => {
-                            self.dpad
-                                .set_state(butt::RightTrigger, value > AXIS_DEAD_ZONE);
+                            self.apad
+                                .set_button(butt::RightTrigger, value > AXIS_DEAD_ZONE);
                         }
                     }
                 }
                 Event::ControllerButtonDown { button, .. } => match button {
-                    DPadUp => self.dpad.set_state(butt::Up, true),
-                    DPadDown => self.dpad.set_state(butt::Down, true),
-                    DPadLeft => self.dpad.set_state(butt::Left, true),
-                    DPadRight => self.dpad.set_state(butt::Right, true),
-                    A => self.dpad.set_state(butt::A, true),
-                    B => self.dpad.set_state(butt::B, true),
-                    X => self.dpad.set_state(butt::X, true),
-                    Y => self.dpad.set_state(butt::Y, true),
-                    // LeftStick => self.dpad.set_state(butt::LeftTrigger, true),
-                    LeftShoulder => self.dpad.set_state(butt::LeftShoulder, true),
-                    // RightStick => self.dpad.set_state(butt::RightTrigger, true),
-                    RightShoulder => self.dpad.set_state(butt::RightShoulder, true),
-                    Guide => self.dpad.set_state(butt::Menu, true),
-                    Start => self.dpad.set_state(butt::Start, true),
-                    Back => self.dpad.set_state(butt::Select, true),
+                    DPadUp => self.apad.set_button(butt::Up, true),
+                    DPadDown => self.apad.set_button(butt::Down, true),
+                    DPadLeft => self.apad.set_button(butt::Left, true),
+                    DPadRight => self.apad.set_button(butt::Right, true),
+                    A => self.apad.set_button(butt::A, true),
+                    B => self.apad.set_button(butt::B, true),
+                    X => self.apad.set_button(butt::X, true),
+                    Y => self.apad.set_button(butt::Y, true),
+                    // LeftStick => self.apad.set_button(butt::LeftTrigger, true),
+                    LeftShoulder => self.apad.set_button(butt::LeftShoulder, true),
+                    // RightStick => self.apad.set_button(butt::RightTrigger, true),
+                    RightShoulder => self.apad.set_button(butt::RightShoulder, true),
+                    Guide => self.apad.set_button(butt::Menu, true),
+                    Start => self.apad.set_button(butt::Start, true),
+                    Back => self.apad.set_button(butt::Select, true),
                     _ => {}
                 },
                 Event::ControllerButtonUp { button, .. } => match button {
-                    DPadUp => self.dpad.set_state(butt::Up, false),
-                    DPadDown => self.dpad.set_state(butt::Down, false),
-                    DPadLeft => self.dpad.set_state(butt::Left, false),
-                    DPadRight => self.dpad.set_state(butt::Right, false),
-                    A => self.dpad.set_state(butt::A, false),
-                    B => self.dpad.set_state(butt::B, false),
-                    X => self.dpad.set_state(butt::X, false),
-                    Y => self.dpad.set_state(butt::Y, false),
-                    LeftStick => self.dpad.set_state(butt::LeftTrigger, false),
-                    LeftShoulder => self.dpad.set_state(butt::LeftShoulder, false),
-                    RightStick => self.dpad.set_state(butt::RightTrigger, false),
-                    RightShoulder => self.dpad.set_state(butt::RightShoulder, false),
-                    Guide => self.dpad.set_state(butt::Menu, false),
-                    Start => self.dpad.set_state(butt::Start, false),
-                    Back => self.dpad.set_state(butt::Select, false),
+                    DPadUp => self.apad.set_button(butt::Up, false),
+                    DPadDown => self.apad.set_button(butt::Down, false),
+                    DPadLeft => self.apad.set_button(butt::Left, false),
+                    DPadRight => self.apad.set_button(butt::Right, false),
+                    A => self.apad.set_button(butt::A, false),
+                    B => self.apad.set_button(butt::B, false),
+                    X => self.apad.set_button(butt::X, false),
+                    Y => self.apad.set_button(butt::Y, false),
+                    LeftStick => self.apad.set_button(butt::LeftTrigger, false),
+                    LeftShoulder => self.apad.set_button(butt::LeftShoulder, false),
+                    RightStick => self.apad.set_button(butt::RightTrigger, false),
+                    RightShoulder => self.apad.set_button(butt::RightShoulder, false),
+                    Guide => self.apad.set_button(butt::Menu, false),
+                    Start => self.apad.set_button(butt::Start, false),
+                    Back => self.apad.set_button(butt::Select, false),
                     _ => {}
                 },
                 Event::KeyDown {
@@ -432,21 +437,21 @@ impl App {
                     }
                     match keycode {
                         Option::None => {}
-                        Some(Keycode::Up) => self.dpad.set_state(butt::Up, true),
-                        Some(Keycode::Down) => self.dpad.set_state(butt::Down, true),
-                        Some(Keycode::Left) => self.dpad.set_state(butt::Left, true),
-                        Some(Keycode::Right) => self.dpad.set_state(butt::Right, true),
-                        Some(Keycode::X) => self.dpad.set_state(butt::A, true),
-                        Some(Keycode::S) => self.dpad.set_state(butt::B, true),
-                        Some(Keycode::Z) => self.dpad.set_state(butt::X, true),
-                        Some(Keycode::A) => self.dpad.set_state(butt::Y, true),
-                        Some(Keycode::NUM_1) => self.dpad.set_state(butt::LeftTrigger, true),
-                        Some(Keycode::Q) => self.dpad.set_state(butt::LeftShoulder, true),
-                        Some(Keycode::NUM_2) => self.dpad.set_state(butt::RightTrigger, true),
-                        Some(Keycode::W) => self.dpad.set_state(butt::RightShoulder, true),
-                        Some(Keycode::TAB) => self.dpad.set_state(butt::Select, true),
-                        Some(Keycode::RETURN) => self.dpad.set_state(butt::Start, true),
-                        Some(Keycode::ESCAPE) => self.dpad.set_state(butt::Menu, true),
+                        Some(Keycode::Up) => self.apad.set_button(butt::Up, true),
+                        Some(Keycode::Down) => self.apad.set_button(butt::Down, true),
+                        Some(Keycode::Left) => self.apad.set_button(butt::Left, true),
+                        Some(Keycode::Right) => self.apad.set_button(butt::Right, true),
+                        Some(Keycode::X) => self.apad.set_button(butt::A, true),
+                        Some(Keycode::S) => self.apad.set_button(butt::B, true),
+                        Some(Keycode::Z) => self.apad.set_button(butt::X, true),
+                        Some(Keycode::A) => self.apad.set_button(butt::Y, true),
+                        Some(Keycode::NUM_1) => self.apad.set_button(butt::LeftTrigger, true),
+                        Some(Keycode::Q) => self.apad.set_button(butt::LeftShoulder, true),
+                        Some(Keycode::NUM_2) => self.apad.set_button(butt::RightTrigger, true),
+                        Some(Keycode::W) => self.apad.set_button(butt::RightShoulder, true),
+                        Some(Keycode::TAB) => self.apad.set_button(butt::Select, true),
+                        Some(Keycode::RETURN) => self.apad.set_button(butt::Start, true),
+                        Some(Keycode::ESCAPE) => self.apad.set_button(butt::Menu, true),
                         Some(Keycode::O) => {
                             if keymod == Mod::LCTRLMOD {
                                 self.display_overlay = !self.display_overlay
@@ -463,21 +468,21 @@ impl App {
                     }
                     match keycode {
                         Option::None => {}
-                        Some(Keycode::Up) => self.dpad.set_state(butt::Up, false),
-                        Some(Keycode::Down) => self.dpad.set_state(butt::Down, false),
-                        Some(Keycode::Left) => self.dpad.set_state(butt::Left, false),
-                        Some(Keycode::Right) => self.dpad.set_state(butt::Right, false),
-                        Some(Keycode::X) => self.dpad.set_state(butt::A, false),
-                        Some(Keycode::S) => self.dpad.set_state(butt::B, false),
-                        Some(Keycode::Z) => self.dpad.set_state(butt::X, false),
-                        Some(Keycode::A) => self.dpad.set_state(butt::Y, false),
-                        Some(Keycode::NUM_1) => self.dpad.set_state(butt::LeftTrigger, false),
-                        Some(Keycode::Q) => self.dpad.set_state(butt::LeftShoulder, false),
-                        Some(Keycode::NUM_2) => self.dpad.set_state(butt::RightTrigger, false),
-                        Some(Keycode::W) => self.dpad.set_state(butt::RightShoulder, false),
-                        Some(Keycode::TAB) => self.dpad.set_state(butt::Select, false),
-                        Some(Keycode::RETURN) => self.dpad.set_state(butt::Start, false),
-                        Some(Keycode::ESCAPE) => self.dpad.set_state(butt::Menu, false),
+                        Some(Keycode::Up) => self.apad.set_button(butt::Up, false),
+                        Some(Keycode::Down) => self.apad.set_button(butt::Down, false),
+                        Some(Keycode::Left) => self.apad.set_button(butt::Left, false),
+                        Some(Keycode::Right) => self.apad.set_button(butt::Right, false),
+                        Some(Keycode::X) => self.apad.set_button(butt::A, false),
+                        Some(Keycode::S) => self.apad.set_button(butt::B, false),
+                        Some(Keycode::Z) => self.apad.set_button(butt::X, false),
+                        Some(Keycode::A) => self.apad.set_button(butt::Y, false),
+                        Some(Keycode::NUM_1) => self.apad.set_button(butt::LeftTrigger, false),
+                        Some(Keycode::Q) => self.apad.set_button(butt::LeftShoulder, false),
+                        Some(Keycode::NUM_2) => self.apad.set_button(butt::RightTrigger, false),
+                        Some(Keycode::W) => self.apad.set_button(butt::RightShoulder, false),
+                        Some(Keycode::TAB) => self.apad.set_button(butt::Select, false),
+                        Some(Keycode::RETURN) => self.apad.set_button(butt::Start, false),
+                        Some(Keycode::ESCAPE) => self.apad.set_button(butt::Menu, false),
                         Some(_) => {} // ignore the rest
                     }
                 }

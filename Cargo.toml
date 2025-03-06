@@ -1,6 +1,6 @@
 [package]
 name = "mini_sdl"
-version = "0.3.5"
+version = "0.3.6"
 edition = "2021"
 description = "A small and simple wrapper around SDL2"
 license = "MIT"
@@ -8,7 +8,7 @@ repository = "https://github.com/DoctorWhoof/mini_sdl.git"
 documentation = "https://docs.rs/mini_sdl/latest/mini_sdl/"
 
 [dependencies]
-padstate = "0.1.0"
+padstate = "0.2.0"
 smooth-buffer = "0.3.1"
 
 [dependencies.sdl2]
