@@ -12,7 +12,7 @@ pub use smooth_buffer::SmoothBuffer;
 pub use smooth_buffer::{Float, Num};
 
 pub use audio::{AudioInput, StereoFrame};
-pub use padstate::{Button, APad};
+pub use padstate::{APad, Button};
 pub use scaling::Scaling;
 
 pub use sdl2;
@@ -124,7 +124,7 @@ impl App {
             240,
             Timing::VsyncLimitFPS(60.0),
             Scaling::PreserveAspect,
-            48000,
+            44100,
         )
     }
 
@@ -282,6 +282,26 @@ impl App {
         })
     }
 
+    /// The render target width
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    /// The render target height
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
+    /// The window width, which is independent from the render target.
+    pub fn window_width(&self) -> u32 {
+        self.canvas.window().size().0
+    }
+
+    /// The window height, which is independent from the render target.
+    pub fn window_height(&self) -> u32 {
+        self.canvas.window().size().1
+    }
+
     /// The amount of time in seconds each frame takes to update and draw.
     /// Necessary to correctly implement delta timing, if you wish to do so.
     /// Performs quantization, rounding it to the nearest most like display frequency
@@ -371,7 +391,7 @@ impl App {
                                 self.apad.set_button(butt::Down, value > AXIS_DEAD_ZONE);
                             } else {
                                 self.apad.left_stick_y = value;
-                          }
+                            }
                         }
                         RightX => {
                             // Could map to additional directional controls if needed
@@ -525,6 +545,10 @@ impl App {
                     (new_width * self.dpi_mult) as u32,
                     (new_height * self.dpi_mult) as u32,
                 ))
+            }
+            Scaling::Fill => {
+                let window_size = self.canvas.window().size();
+                Some(Rect::new(0, 0, window_size.0, window_size.1))
             }
             Scaling::StretchToWindow => None,
         }

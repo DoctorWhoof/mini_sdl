@@ -14,4 +14,8 @@ pub enum Scaling {
     /// Stretches the render target to the window, completely disregarding the aspect ratio. The
     /// Picture Gods will smite you if you release anything using this.
     StretchToWindow,
+
+    /// Does not stretch, changes the canvas dimensions instead causing graphics to stay at same size,
+    /// but with more or less space around them.
+    Fill
 }
