@@ -1,6 +1,6 @@
 [package]
 name = "mini_sdl"
-version = "0.3.8"
+version = "0.3.9"
 edition = "2021"
 description = "A small and simple wrapper around SDL2"
 license = "MIT"
@@ -28,5 +28,4 @@ members = [
     "example_font",
     "example_gamepad",
     "example_overlay",
-    "example_audio",
 ]

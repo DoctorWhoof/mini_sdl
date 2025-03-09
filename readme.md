@@ -19,6 +19,7 @@ This example can be run invoking `cargo run -p example` from a terminal at the r
 use mini_sdl::*;
 
 fn main() -> SdlResult {
+    let time = std::time::Instant::now();
     let mut app = mini_sdl::App::new(
         "test",
         320,
@@ -48,6 +49,10 @@ fn main() -> SdlResult {
         )?;
         app.pixel_buffer_present()?;
         app.frame_finish()?;
+        // Quit after 2 seconds
+        if time.elapsed().as_secs_f64() > 2.0 {
+            app.quit_requested = true
+        }
     }
     Ok(())
 }
