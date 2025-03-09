@@ -10,9 +10,10 @@ I decided to make this crate after spending an entire weekend testing multiple l
 
 The main goal is to favor simplicity over features. With that said, it will expand in the future, providing access to other basic SDL2 features like sound.
 
-*Warning*: Some SDL2 internals are exposed as public members, but this kind of access is *untested*.
+_Warning_: Some SDL2 internals are exposed as public members, but this kind of access is _untested_.
 
 ## Example
+
 This example can be run invoking `cargo run -p example` from a terminal at the root of the crate.
 
 ```rust
@@ -21,12 +22,12 @@ use mini_sdl::*;
 fn main() -> SdlResult {
     let time = std::time::Instant::now();
     let mut app = mini_sdl::App::new(
-        "test",
-        320,
+        "test",                         // App Name displayed on window.
+        320,                            // Pixel buffer resolution, won't be used if you draw directly to canvas.
         240,
-        Timing::VsyncLimitFPS(60.0),
-        Scaling::PreserveAspect,
-        None
+        Timing::VsyncLimitFPS(60.0),    // Frame Timing strategy.
+        Scaling::PreserveAspect,        // Pixel buffer scaling strategy, ignored if you draw directly to canvas.
+        None                            // Audio sampling rate, if audio is desired.
     )?;
 
     app.print_fps_interval = Some(1.0);
