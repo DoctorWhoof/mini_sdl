@@ -110,8 +110,8 @@ pub struct App {
     #[cfg(feature = "ttf")]
     overlay: Vec<String>,
     // Sound
-    pub audio_device: AudioDevice<AudioInput>,
-    sample_rate: u32,
+    pub audio_device: Option<AudioDevice<AudioInput>>,
+    sample_rate: Option<u32>,
     // buffer: VecDeque<StereoFrame>,
 }
 
@@ -124,7 +124,7 @@ impl App {
             240,
             Timing::VsyncLimitFPS(60.0),
             Scaling::PreserveAspect,
-            44100,
+            Some(44100),
         )
     }
 
@@ -135,7 +135,7 @@ impl App {
         height: u32,
         timing: Timing,
         scaling: Scaling,
-        sample_rate: u32,
+        sample_rate: Option<u32>,
     ) -> Result<Self, String> {
         sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
 
@@ -211,30 +211,37 @@ impl App {
             )
             .map_err(|e| e.to_string())?;
 
-        //Sound init
-        let sample_count = match timing {
-            Timing::Immediate | Timing::Vsync => {
-                u16::try_from(prev_power_of_two((sample_rate / 60) * 2))
-                    .unwrap()
-                    .clamp(1024, 8192)
-            }
-            Timing::VsyncLimitFPS(limit) | Timing::ImmediateLimitFPS(limit) => {
-                u16::try_from(prev_power_of_two((sample_rate as f64 / limit) as u32 * 2))
-                    .unwrap()
-                    .clamp(1024, 8192)
-            }
-        };
 
-        let desired_spec = AudioSpecDesired {
-            freq: Some(sample_rate as i32),
-            channels: Some(2),
-            samples: Some(sample_count),
-        };
-        let audio_subsystem = context.audio()?;
-        let audio_device = audio_subsystem.open_playback(None, &desired_spec, |spec| {
-            println!("{:?}", spec);
-            AudioInput::new(sample_count)
-        })?;
+
+
+        let mut audio_device = None;
+        if let Some(sample_rate) = sample_rate {
+            //Sound init
+            let sample_count = match timing {
+                Timing::Immediate | Timing::Vsync => {
+                    u16::try_from(prev_power_of_two((sample_rate / 60) * 2))
+                        .unwrap()
+                        .clamp(1024, 8192)
+                }
+                Timing::VsyncLimitFPS(limit) | Timing::ImmediateLimitFPS(limit) => {
+                    u16::try_from(prev_power_of_two((sample_rate as f64 / limit) as u32 * 2))
+                        .unwrap()
+                        .clamp(1024, 8192)
+                }
+            };
+            let desired_spec = AudioSpecDesired {
+                freq: Some(sample_rate as i32),
+                channels: Some(2),
+                samples: Some(sample_count),
+            };
+            let audio_subsystem = context.audio()?;
+            let device = audio_subsystem.open_playback(None, &desired_spec, |spec| {
+                println!("{:?}", spec);
+                AudioInput::new(sample_count)
+            })?;
+            audio_device = Some(device);
+
+        }
 
         let events = context.event_pump()?;
 
@@ -657,23 +664,30 @@ impl App {
     // Audio
     /// Initiates playback of audio device.
     pub fn audio_start(&mut self) {
-        self.audio_device.resume();
+        if let Some(audio) = &mut self.audio_device {
+            audio.resume();
+        }
     }
 
     /// Pauses playback of audio device.
     pub fn audio_pause(&mut self) {
-        self.audio_device.pause()
+        if let Some(audio) = &mut self.audio_device {
+            audio.pause()
+        }
     }
 
     /// Returns the current audio mix rate. TODO: This is locked at 44100Hz, should be user adjustable.
-    pub fn audio_mixrate(&self) -> u32 {
+    pub fn audio_mixrate(&self) -> Option<u32> {
         self.sample_rate
     }
 
     /// Copies a slice of StereoFrames to the audio buffer. Ideally you should call this only once per frame,
     /// with all the samples that you need for that frame.
     pub fn audio_push_samples(&mut self, samples: &[StereoFrame]) -> SdlResult {
-        let mut audio = self.audio_device.lock();
+        let Some(audio_device) = &mut self.audio_device else {
+            return Err("Audio device not found".to_string());
+        };
+        let mut audio = audio_device.lock();
         audio.push_samples(samples);
         Ok(())
     }

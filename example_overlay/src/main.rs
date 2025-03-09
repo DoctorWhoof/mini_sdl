@@ -8,7 +8,7 @@ fn main() -> SdlResult {
         240,
         Timing::VsyncLimitFPS(60.0),
         Scaling::PreserveAspect,
-        48000
+        None
     )?;
 
     sdl2::hint::set("SDL_RENDER_SCALE_QUALITY", "0"); // Sharp pixels

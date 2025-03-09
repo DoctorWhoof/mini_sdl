@@ -8,10 +8,13 @@ fn main() -> SdlResult {
         240,
         Timing::VsyncLimitFPS(60.0),
         Scaling::PreserveAspect,
-        48000
+        Some(48000)
     )?;
 
-    let rate = app.audio_mixrate() as f64;
+    let Some(sample_rate) = app.audio_mixrate() else {
+        return Err("Audio not requested".to_string())
+    };
+    let rate = sample_rate as f64;
     let frequency = 440.0;  // 440Hz, frequency of note A4
     let period = 1.0 / frequency;
     let time_per_sample = 1.0 / rate; // Time duration of one sample
