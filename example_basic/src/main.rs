@@ -5,7 +5,7 @@
 
 use mini_sdl::*;
 
-fn main() -> SdlResult {
+fn main() -> SdlResult<()> {
     let mut app = mini_sdl::App::new(
         "test",
         320,

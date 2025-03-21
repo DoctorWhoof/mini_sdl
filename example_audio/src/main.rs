@@ -1,7 +1,7 @@
 use std::{f64::consts::TAU, i16};
 use mini_sdl::*;
 
-fn main() -> SdlResult {
+fn main() -> SdlResult<()> {
     let mut app = mini_sdl::App::new(
         "audio-test",
         320,

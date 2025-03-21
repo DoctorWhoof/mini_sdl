@@ -2,7 +2,7 @@
 
 This is an early publish of a work-in-progress crate. Use with discretion.
 
-### This crate assumes you've already installed SDL2 on your system (i.e. 'brew install sdl2' on MacOS). It wil not run if SDL2 isn't found.
+### This crate assumes you've already installed SDL2 on your system (i.e. 'brew install sdl3' on MacOS). It wil not run if SDL2 isn't found.
 
 Designed primarily to provide raw access to an RGB pixel buffer and display its contents correctly, with timing options like Vsync and frame rate limiting, and scaling options like Aspect Ratio and integer scaling.
 
@@ -61,10 +61,10 @@ fn main() -> SdlResult {
 
 ### Static Builds
 
-To build statically, run the 'cargo build' command preceded by these flags which will point out where "sdl2" and "sdl2_ttf" are:
+To build statically, run the 'cargo build' command preceded by these flags which will point out where "sdl3" and "sdl2_ttf" are:
 
 ```bash
-RUSTFLAGS='-L /opt/homebrew/Cellar/sdl2/2.30.8/lib -L /opt/homebrew/Cellar/sdl2_ttf/2.22.0/lib' cargo build
+RUSTFLAGS='-L /opt/homebrew/Cellar/sdl3/2.30.8/lib -L /opt/homebrew/Cellar/sdl2_ttf/2.22.0/lib' cargo build
 ```
 
 Replace the paths with ones valid for your system, then add the "static-link" feature to cargo.toml.

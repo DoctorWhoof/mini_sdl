@@ -1,14 +1,16 @@
-use mini_sdl::*;
-use sdl2::{pixels::Color, rect::Rect};
+use mini_sdl::{
+    sdl3::{pixels::Color, render::FRect}, // TODO: pub use by default
+    *,
+};
 
-fn main() -> SdlResult {
+fn main() -> SdlResult<()> {
     let mut app = mini_sdl::App::new(
         "test",
         320,
         240,
         Timing::VsyncLimitFPS(60.0),
         Scaling::PreserveAspect,
-        None
+        None,
     )?;
 
     println!("Current dir is:{:?}", std::env::current_dir());
@@ -16,7 +18,10 @@ fn main() -> SdlResult {
     println!("Otherwise the font file will not be found!");
 
     // let mut font = app.font_load("example_font/src/classic-display/classic-display.ttf", 16)?;
-    let mut font = app.font_load("example_font/src/classic-mono-narrow/classic-mono-narrow.ttf", 8)?;
+    let mut font = app.font_load(
+        "example_font/src/classic-mono-narrow/classic-mono-narrow.ttf",
+        8.0,
+    )?;
 
     while !app.quit_requested {
         app.frame_start()?;
@@ -28,17 +33,17 @@ fn main() -> SdlResult {
                 target.clear();
                 target.set_draw_color((0, 0, 0, 255));
                 // Unfortunately SDL's error type here is different, and we can't use the '?' operator.
-                target.draw_rect(Rect::new(10, 20, 300, 200)).ok();
+                target.draw_rect(FRect::new(10.0, 20.0, 300.0, 200.0)).ok();
                 font.color = Color::RGB(255, 230, 150);
-                font.draw("But this text is drawn", 20, 50, 2.0, target).ok();
+                font.draw("But this text is drawn", 20, 50, 2.0, target)
+                    .ok();
                 font.draw("to the render target", 20, 70, 2.0, target).ok();
-                font.draw("and scales accordingly!", 20, 90, 2.0, target).ok();
+                font.draw("and scales accordingly!", 20, 90, 2.0, target)
+                    .ok();
                 font.draw("1234567890", 20, 110, 2.0, target).ok();
                 font.draw("ABCDEFGHIJKLMNOP", 20, 130, 2.0, target).ok();
                 font.draw("QRSTUVWXYZ", 20, 150, 2.0, target).ok();
-
-            })
-            .map_err(|e| e.to_string())?;
+            });
         // Present target to canvas, keep drawing directly on canvas.
         app.render_target_present()?;
         font.color = Color::WHITE;

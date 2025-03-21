@@ -1,4 +1,4 @@
-use sdl2::audio::AudioCallback;
+use sdl3::audio::AudioCallback;
 use std::collections::VecDeque;
 
 
