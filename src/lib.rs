@@ -553,10 +553,6 @@ impl App {
                     (new_height * self.dpi_mult) as u32,
                 ))
             }
-            Scaling::Fill => {
-                let window_size = self.canvas.window().size();
-                Some(Rect::new(0, 0, window_size.0, window_size.1))
-            }
             Scaling::StretchToWindow => None,
         }
     }

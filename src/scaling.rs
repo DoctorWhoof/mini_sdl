@@ -1,4 +1,6 @@
-/// The scaling strategy. A "VariableAspectRatio" option may be provided in the future.
+/// The scaling strategy for the render target. A "VariableAspectRatio" option that preserves a minimum
+/// size while alowing vertical or horizontal aspects may be provided in the future.
+/// To use the entire window without scaling simply draw directly to "canvas".
 
 #[derive(Debug, PartialEq, Default)]
 pub enum Scaling {
@@ -14,8 +16,4 @@ pub enum Scaling {
     /// Stretches the render target to the window, completely disregarding the aspect ratio. The
     /// Picture Gods will smite you if you release anything using this.
     StretchToWindow,
-
-    /// Does not stretch, changes the canvas dimensions instead causing graphics to stay at same size,
-    /// but with more or less space around them.
-    Fill
 }
