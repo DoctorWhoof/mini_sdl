@@ -19,7 +19,7 @@ This example can be run invoking `cargo run -p example` from a terminal at the r
 ```rust
 use mini_sdl::*;
 
-fn main() -> SdlResult {
+fn main() -> SdlResult<()> {
     let time = std::time::Instant::now();
     let mut app = mini_sdl::App::new(
         "test",                         // App Name displayed on window.
