@@ -40,12 +40,10 @@ fn main() -> SdlResult<()> {
         for _ in 0..samples_per_frame {
             let phase = (accumulated_phase % period) / period;
             let sine_value = (TAU * phase).sin();
-            // Convert to i16 and push
+            // Push stereo samples
             let value = (sine_value * 0.25 * i16::MAX as f64) as i16;
-            samples.push(StereoFrame {
-                left: value,
-                right: value,
-            });
+            samples.push(value);    // left
+            samples.push(value);    // right
             accumulated_phase += time_per_sample;
         }
         // Copy new samples to app's audio buffer and reset samples container

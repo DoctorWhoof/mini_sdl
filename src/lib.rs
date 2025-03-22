@@ -1,17 +1,15 @@
 #![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/readme.md"))]
 
-mod audio;
 mod scaling;
 mod timing;
 
-use sdl3::audio::{AudioFormat, AudioSpec, AudioStreamWithCallback};
+use sdl3::audio::{AudioFormat, AudioSpec, AudioStreamOwner};
 use sdl3::gamepad::Gamepad;
 use sdl3::pixels::PixelFormat;
 use sdl3::sys::pixels::SDL_PixelFormat;
 pub use smooth_buffer::SmoothBuffer;
 pub use smooth_buffer::{Float, Num};
 
-pub use audio::{AudioInput, StereoFrame};
 pub use padstate::{APad, Button};
 pub use scaling::Scaling;
 
@@ -24,24 +22,18 @@ mod font_atlas;
 pub use font_atlas::FontAtlas;
 
 use sdl3::{
-    // audio::AudioDevice,
     event::Event,
     keyboard::{Keycode, Mod},
-    // pixels::PixelFormatEnum,
     rect::Rect,
     render::{Canvas, Texture, TextureCreator},
     video::{Window, WindowContext},
-    EventPump,
-    Sdl,
+    EventPump, Sdl,
 };
-use std::{
-    // path::Path,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
 pub type SdlResult<E> = Result<E, Box<dyn std::error::Error>>;
 
-const ELAPSED_QUANT_SIZE: f64 = 1.0 / 360.0; // 3X 120Hz, 6X 60Hz
+const ELAPSED_QUANT_SIZE: f64 = 1.0 / 1440.0; // 3X 120Hz, 6X 60Hz
 
 /// A struct that provides SDL initialization and stores the SDL context and its associated data.
 /// Designed mostly to be used as a fixed resolution "virtual pixel buffer", but the SDL canvas is
@@ -110,8 +102,10 @@ pub struct App {
     pub overlay_coords: sdl3::rect::Point,
     #[cfg(feature = "ttf")]
     overlay: Vec<String>,
-    // Sound
-    pub audio_device: Option<AudioStreamWithCallback<AudioInput>>,
+    // Audio
+    // pub audio_device: Option<AudioStreamWithCallback<AudioPlayback>>,
+    // audio_device: Option<AudioDevice>,
+    pub audio_stream: Option<AudioStreamOwner>,
     sample_rate: Option<u32>,
     // buffer: Vec<i16>,
 }
@@ -200,34 +194,26 @@ impl App {
             height,
         )?;
 
-        let mut audio_device = None;
+        // let mut audio_device = None;
+        let mut audio_stream = None;
         if let Some(sample_rate) = sample_rate {
-        //Sound init
-            let desired_spec = AudioSpec {
+            //Sound init
+            let spec = AudioSpec {
                 freq: Some(sample_rate as i32),
                 channels: Some(2),
                 format: Some(AudioFormat::s16_sys()),
             };
             let audio_subsystem = context.audio()?;
-            // let sample_count = match timing {
-            //             Timing::Immediate => {
-            //                 u16::try_from(prev_power_of_two((sample_rate / 60) * 2))
-            //                     .unwrap()
-            //                     .clamp(1024, 8192)
-            //             }
-            //             Timing::Vsync | Timing::VsyncLimitFPS(limit) | Timing::ImmediateLimitFPS(limit) => {
-            //                 u16::try_from(prev_power_of_two((sample_rate as f64 / limit) as u32 * 2))
-            //                     .unwrap()
-            //                     .clamp(1024, 8192)
-            //             }
-            //         };
-            // println!("MiniSDL: Audio buffer lenght set to {}", sample_count);
 
-            let device = audio_subsystem.open_playback_stream(
-                &desired_spec,
-                AudioInput::new(),
-            )?;
-            audio_device = Some(device);
+            // let device = audio_subsystem.open_queue::<i16, _>(None, &desired_spec)?;
+
+            // let device =
+            //     audio_subsystem.open_playback_stream(&desired_spec, AudioPlayback::new())?;
+            //
+            let device = audio_subsystem.open_playback_device(&spec)?;
+            let stream = device.open_device_stream(Some(&spec))?;
+            audio_stream = Some(stream);
+            // audio_device = Some(device);
         }
 
         let events = context.event_pump()?;
@@ -261,7 +247,8 @@ impl App {
             texture_creator,
             // Audio
             sample_rate,
-            audio_device,
+            // audio_device,
+            audio_stream,
             // Optional features
             #[cfg(feature = "ttf")]
             fonts: sdl3::ttf::init()?,
@@ -275,7 +262,6 @@ impl App {
             overlay_scale: 1.0,
             #[cfg(feature = "ttf")]
             overlay_coords: sdl3::rect::Point::new(16, 16),
-
         })
     }
 
@@ -650,16 +636,18 @@ impl App {
     // Audio
     /// Initiates playback of audio device.
     pub fn audio_start(&mut self) -> SdlResult<()> {
-        if let Some(audio) = &mut self.audio_device {
+        if let Some(audio) = &mut self.audio_stream {
             audio.resume()?;
+            // audio.resume();
         }
         Ok(())
     }
 
     /// Pauses playback of audio device.
     pub fn audio_pause(&mut self) -> SdlResult<()> {
-        if let Some(audio) = &mut self.audio_device {
+        if let Some(audio) = &mut self.audio_stream {
             audio.pause()?;
+            // audio.pause();
         }
         Ok(())
     }
@@ -671,24 +659,27 @@ impl App {
 
     /// Copies a slice of StereoFrames to the audio buffer. Ideally you should call this only once per frame,
     /// with all the samples that you need for that frame.
-    pub fn audio_push_samples(&mut self, samples: &[StereoFrame]) -> SdlResult<()> {
-        let Some(audio_device) = &mut self.audio_device else {
+    pub fn audio_push_samples(&mut self, samples: &[i16]) -> SdlResult<()> {
+        let Some(stream) = &mut self.audio_stream else {
             return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
                 "Audio device not found",
             )));
         };
-        if let Some(mut audio) = audio_device.lock(){
-            audio.push_samples(samples);
-        }
+
+        stream.put_data_i16(samples)?;
+        // if let Some(mut audio) = audio_device.lock() {
+        //     audio.push_samples(samples);
+        // }
+
         Ok(())
     }
 
     /// Estimates how many stereo frames to fill the buffer now for minimum lag without audio cut-offs.
     pub fn audio_samples_per_frame(&self) -> Option<usize> {
-        let rate = self.sample_rate?;
-        let count = rate as f64 * self.elapsed_time() * 0.9;
-        Some(count as usize)
+        let sample_rate = self.sample_rate?;
+        let sample_count = (sample_rate as f64 * self.elapsed_time * 0.95) as usize;
+        Some(sample_count)
     }
 }
 
@@ -719,15 +710,15 @@ pub(crate) fn next_power_of_two(mut n: u32) -> u32 {
     n
 }
 
-pub(crate) fn prev_power_of_two(n: u32) -> u32 {
-    if n.is_power_of_two() {
-        return n;
-    }
-    let mut x = n;
-    x |= x >> 1;
-    x |= x >> 2;
-    x |= x >> 4;
-    x |= x >> 8;
-    x |= x >> 16;
-    (x >> 1) + 1
-}
+// pub(crate) fn prev_power_of_two(n: u32) -> u32 {
+//     if n.is_power_of_two() {
+//         return n;
+//     }
+//     let mut x = n;
+//     x |= x >> 1;
+//     x |= x >> 2;
+//     x |= x >> 4;
+//     x |= x >> 8;
+//     x |= x >> 16;
+//     (x >> 1) + 1
+// }
