@@ -2,7 +2,7 @@ use crate::{next_power_of_two, SdlResult};
 use sdl3::{
     pixels::{Color, PixelFormat},
     rect::Rect,
-    render::{Canvas, ScaleMode, Texture, TextureCreator},
+    render::{Canvas, Texture, TextureCreator},
     surface::Surface,
     sys::pixels::SDL_PixelFormat,
     ttf::Sdl3TtfContext,
@@ -18,6 +18,8 @@ const CHARACTERS: &'static str =
 pub struct FontAtlas {
     pub texture: Texture,
     pub color: Color,
+    // TODO: Multi line drawing with proper loine spacing
+    pub line_spacing: f32, // Draw does not break lines yet! Stored here for convenience.
     height: f32,
     rects: HashMap<char, Rect>,
 }
@@ -26,10 +28,11 @@ impl FontAtlas {
     pub fn new(
         path: impl AsRef<Path>,
         size: f32,
+        line_spacing: f32,
         ttf: &Sdl3TtfContext,
         texture_creator: &mut TextureCreator<WindowContext>,
     ) -> SdlResult<Self> {
-        let ttf_font = ttf.load_font(path, size).map_err(|e| e.to_string())?;
+        let ttf_font = ttf.load_font(path, size)?;
 
         // Obtain character metrics, populate rects and chars vectors in the same order.
         let mut char_rects = vec![];
@@ -55,8 +58,8 @@ impl FontAtlas {
         for ch in CHARACTERS.chars() {
             let surf = ttf_font
                 .render_char(ch)
-                .blended(Color::RGBA(255, 255, 255, 255))
-                .map_err(|e| e.to_string())?;
+                // .lcd(Color::RGBA(255, 255, 255, 255), Color::RGBA(0, 0, 0, 255))?;
+                .blended(Color::RGBA(255, 255, 255, 255))?;
             pixel_count += surf.width() * surf.height();
             surfaces.push(surf);
         }
@@ -92,7 +95,7 @@ impl FontAtlas {
         }
 
         // Generate texture from surface
-        let mut texture = texture_creator.create_texture_from_surface(&atlas)?;
+        let texture = texture_creator.create_texture_from_surface(&atlas)?;
         // texture.set_scale_mode(ScaleMode::Nearest);
 
         // Finish
@@ -100,6 +103,7 @@ impl FontAtlas {
             texture,
             rects,
             height: size,
+            line_spacing,
             color: Color::WHITE,
         })
     }

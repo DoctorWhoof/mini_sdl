@@ -1,9 +1,8 @@
-use sdl3::audio::AudioCallback;
-use std::collections::VecDeque;
+use sdl3::audio::{AudioCallback, AudioStream};
+// use std::collections::VecDeque;
 
-
-/// A single audio sample, with left and right channels.
-#[derive(Debug, Default, Clone, Copy)]
+// /// A single audio sample, with left and right channels.
+// #[derive(Debug, Default, Clone, Copy)]
 pub struct StereoFrame {
     pub left: i16,
     pub right: i16,
@@ -12,32 +11,16 @@ pub struct StereoFrame {
 /// Used internally to push audio samples to the audio device. Although you can access it directly,
 /// it requires locking the audio device so it's easier to use 'App::audio_push_samples' instead.
 pub struct AudioInput {
-    buffer:  VecDeque<StereoFrame>,
-    last_frame: StereoFrame,
-    head: usize,
-    device_sample_count:u16
+    buffer: Vec<i16>,
+    // last_frame: StereoFrame,
+    // head: usize,
+    // device_sample_count: u16,
 }
 
 impl AudioInput {
-    // pub fn new(mix_rate:u32) -> Self {
-    pub fn new(device_sample_count:u16) -> Self {
+    pub fn new() -> Self {
         Self {
-            buffer: VecDeque::default(),
-            last_frame: StereoFrame::default(),
-            head: 0,
-            device_sample_count,
-        }
-    }
-
-    /// Estimates how many stereo frames to fill the buffer now for minimum lag without audio cut-offs.
-    pub fn frames_available(&self) -> usize {
-        let desired_frames = self.device_sample_count as usize * 2;
-        let len = self.buffer.len();
-        if len < desired_frames {
-            // println!( "desired: {}, filled: {}, result:{}", desired_frames, len, desired_frames - len);
-            desired_frames - len
-        } else {
-            32
+            buffer: Vec::default(),
         }
     }
 
@@ -49,32 +32,26 @@ impl AudioInput {
     /// Push a single StereoFrame to the buffer.
     #[inline(always)]
     pub fn push_sample(&mut self, frame: StereoFrame) {
-        self.buffer.push_back(frame);
+        self.buffer.push(frame.left);
+        self.buffer.push(frame.right);
     }
 
     /// Push a slice of StereoFrames. Ideally you should call this only once per frame,
     /// with all the samples that you need for that frame.
     #[inline(always)]
     pub fn push_samples(&mut self, frames: &[StereoFrame]) {
-        for sample in frames.iter(){
-            self.buffer.push_back(*sample);
+        for sample in frames.iter() {
+            self.buffer.push(sample.left);
+            self.buffer.push(sample.right);
         }
     }
 }
 
-impl<'a> AudioCallback for AudioInput {
-    type Channel = i16;
-
-    fn callback(&mut self, out: &mut [i16]) {
-        for x in out.iter_mut() {
-            if self.head % 2 == 0 {
-                self.head = 0;
-                self.last_frame = self.buffer.pop_front().unwrap_or_default();
-                *x = self.last_frame.left;
-            } else {
-                *x = self.last_frame.right;
-            }
-            self.head += 1;
-        }
+impl<'a> AudioCallback<i16> for AudioInput {
+    fn callback(&mut self, stream: &mut AudioStream, requested: i32) {
+        // for n in 0 .. requested {
+            stream.put_data_i16(self.buffer.as_slice()).unwrap();
+        // }
+        self.buffer.clear();
     }
 }

@@ -16,11 +16,6 @@ version = "0.14.18"
 default-features = false
 features = ["unsafe_textures"]
 
-# [dependencies.sdl3]
-# version = "0.37.0"
-# default-features = false
-# features = ["unsafe_textures"]
-
 [features]
 default = []
 static-link = ["sdl3/static-link"]
