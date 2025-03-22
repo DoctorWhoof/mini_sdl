@@ -21,6 +21,7 @@ impl AudioInput {
     pub fn new() -> Self {
         Self {
             buffer: Vec::default(),
+            // device_sample_count,
         }
     }
 
@@ -49,9 +50,16 @@ impl AudioInput {
 
 impl<'a> AudioCallback<i16> for AudioInput {
     fn callback(&mut self, stream: &mut AudioStream, requested: i32) {
-        // for n in 0 .. requested {
-            stream.put_data_i16(self.buffer.as_slice()).unwrap();
-        // }
+        let len = self.buffer.len();
+        if len == 0 || requested == 0{
+            return;
+        }
+        // stream
+        //     .put_data_i16(&self.buffer.as_slice()[(len - requested as usize)..len])
+        //     .unwrap();
+        stream
+            .put_data_i16(self.buffer.as_slice())
+            .unwrap();
         self.buffer.clear();
     }
 }

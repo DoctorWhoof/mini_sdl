@@ -4,10 +4,6 @@ mod audio;
 mod scaling;
 mod timing;
 
-// use sdl3::gamepad::GameController;
-// use sdl3::keyboard::Mod;
-// use sdl3::EventPump;
-
 use sdl3::audio::{AudioFormat, AudioSpec, AudioStreamWithCallback};
 use sdl3::gamepad::Gamepad;
 use sdl3::pixels::PixelFormat;
@@ -213,6 +209,19 @@ impl App {
                 format: Some(AudioFormat::s16_sys()),
             };
             let audio_subsystem = context.audio()?;
+            // let sample_count = match timing {
+            //             Timing::Immediate => {
+            //                 u16::try_from(prev_power_of_two((sample_rate / 60) * 2))
+            //                     .unwrap()
+            //                     .clamp(1024, 8192)
+            //             }
+            //             Timing::Vsync | Timing::VsyncLimitFPS(limit) | Timing::ImmediateLimitFPS(limit) => {
+            //                 u16::try_from(prev_power_of_two((sample_rate as f64 / limit) as u32 * 2))
+            //                     .unwrap()
+            //                     .clamp(1024, 8192)
+            //             }
+            //         };
+            // println!("MiniSDL: Audio buffer lenght set to {}", sample_count);
 
             let device = audio_subsystem.open_playback_stream(
                 &desired_spec,
@@ -674,6 +683,13 @@ impl App {
         }
         Ok(())
     }
+
+    /// Estimates how many stereo frames to fill the buffer now for minimum lag without audio cut-offs.
+    pub fn audio_samples_per_frame(&self) -> Option<usize> {
+        let rate = self.sample_rate?;
+        let count = rate as f64 * self.elapsed_time() * 0.9;
+        Some(count as usize)
+    }
 }
 
 #[inline(always)]
@@ -703,15 +719,15 @@ pub(crate) fn next_power_of_two(mut n: u32) -> u32 {
     n
 }
 
-// pub(crate) fn prev_power_of_two(n: u32) -> u32 {
-//     if n.is_power_of_two() {
-//         return n;
-//     }
-//     let mut x = n;
-//     x |= x >> 1;
-//     x |= x >> 2;
-//     x |= x >> 4;
-//     x |= x >> 8;
-//     x |= x >> 16;
-//     (x >> 1) + 1
-// }
+pub(crate) fn prev_power_of_two(n: u32) -> u32 {
+    if n.is_power_of_two() {
+        return n;
+    }
+    let mut x = n;
+    x |= x >> 1;
+    x |= x >> 2;
+    x |= x >> 4;
+    x |= x >> 8;
+    x |= x >> 16;
+    (x >> 1) + 1
+}
