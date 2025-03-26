@@ -668,18 +668,33 @@ impl App {
         };
 
         stream.put_data_i16(samples)?;
-        // if let Some(mut audio) = audio_device.lock() {
-        //     audio.push_samples(samples);
-        // }
-
         Ok(())
     }
 
-    /// Estimates how many stereo frames to fill the buffer now for minimum lag without audio cut-offs.
+    /// Estimates how many stereo frames to fill the buffer at the current frame,
+    /// with minimum lag and without audio cut-offs.
     pub fn audio_samples_per_frame(&self) -> Option<usize> {
         let sample_rate = self.sample_rate?;
-        let sample_count = (sample_rate as f64 * self.elapsed_time * 0.95) as usize;
-        Some(sample_count)
+        let queued_samples = (sample_rate as f64 * self.elapsed_time_raw) as usize;
+
+        // Calculate ideal number of samples based on elapsed time
+        let ideal_samples = (sample_rate as f64 * self.elapsed_time_raw) as usize;
+
+        // Adjust for existing buffer content - if buffer has grown too large, reduce samples
+        let buffer_target = (sample_rate as f64 * 0.02) as usize; // 20ms buffer
+
+        if queued_samples > buffer_target {
+            // Buffer growing too large, generate fewer samples
+            let overflow = queued_samples - buffer_target;
+            if overflow >= ideal_samples {
+                None // Don't generate any samples this frame
+            } else {
+                Some(ideal_samples - overflow)
+            }
+        } else {
+            // Buffer is small enough, generate normal amount
+            Some(ideal_samples)
+        }
     }
 }
 
