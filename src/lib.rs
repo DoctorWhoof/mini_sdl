@@ -1,21 +1,19 @@
 #![doc = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/readme.md"))]
 
-mod audio;
 mod scaling;
 mod timing;
 
-use sdl2::controller::GameController;
-use sdl2::keyboard::Mod;
-use sdl2::EventPump;
-
+use sdl3::audio::{AudioFormat, AudioSpec, AudioStreamOwner};
+use sdl3::gamepad::Gamepad;
+use sdl3::pixels::PixelFormat;
+use sdl3::sys::pixels::SDL_PixelFormat;
 pub use smooth_buffer::SmoothBuffer;
 pub use smooth_buffer::{Float, Num};
 
-pub use audio::{AudioInput, StereoFrame};
 pub use padstate::{APad, Button};
 pub use scaling::Scaling;
 
-pub use sdl2;
+pub use sdl3;
 pub use timing::Timing;
 
 #[cfg(feature = "ttf")]
@@ -23,24 +21,19 @@ mod font_atlas;
 #[cfg(feature = "ttf")]
 pub use font_atlas::FontAtlas;
 
-use sdl2::{
-    audio::{AudioDevice, AudioSpecDesired},
+use sdl3::{
     event::Event,
-    keyboard::Keycode,
-    pixels::PixelFormatEnum,
+    keyboard::{Keycode, Mod},
     rect::Rect,
-    render::{Canvas, Texture, TextureAccess, TextureCreator},
+    render::{Canvas, Texture, TextureCreator},
     video::{Window, WindowContext},
-    Sdl,
+    EventPump, Sdl,
 };
-use std::{
-    // path::Path,
-    time::{Duration, Instant},
-};
+use std::time::{Duration, Instant};
 
-pub type SdlResult = Result<(), String>;
+pub type SdlResult<E> = Result<E, Box<dyn std::error::Error>>;
 
-const ELAPSED_QUANT_SIZE: f64 = 1.0 / 360.0; // 3X 120Hz, 6X 60Hz
+const ELAPSED_QUANT_SIZE: f64 = 1.0 / 1440.0; // 3X 120Hz, 6X 60Hz
 
 /// A struct that provides SDL initialization and stores the SDL context and its associated data.
 /// Designed mostly to be used as a fixed resolution "virtual pixel buffer", but the SDL canvas is
@@ -69,18 +62,18 @@ pub struct App {
     /// Cache for the event pump
     pub events: EventPump,
     /// Player 1 controller
-    pub controller_1: Option<GameController>,
+    pub controller_1: Option<Gamepad>,
     pub allow_analog_to_dpad_x: bool,
     pub allow_analog_to_dpad_y: bool,
     /// The SDL TTF context
     #[cfg(feature = "ttf")]
-    pub fonts: sdl2::ttf::Sdl2TtfContext,
+    pub fonts: sdl3::ttf::Sdl3TtfContext,
     /// The render target with the fixed resolution specified when creating the app.
     /// This is slower than the pixel buffer if your goal is to draw pixel-by-pixel
     /// (use 'pixel_buffer_update' for that) but can use regular SDL drawing functions via
     /// "canvas.with_texture_canvas".
     pub render_target: Texture,
-    render_texture: Texture,
+    pixel_buffer: Texture,
     // Video
     width: u32,
     height: u32,
@@ -106,18 +99,20 @@ pub struct App {
     pub overlay_scale: f32,
     /// Initial coordinates (left, top) of the overlay text.
     #[cfg(feature = "ttf")]
-    pub overlay_coords: sdl2::rect::Point,
+    pub overlay_coords: sdl3::rect::Point,
     #[cfg(feature = "ttf")]
     overlay: Vec<String>,
-    // Sound
-    pub audio_device: Option<AudioDevice<AudioInput>>,
+    // Audio
+    // pub audio_device: Option<AudioStreamWithCallback<AudioPlayback>>,
+    // audio_device: Option<AudioDevice>,
+    pub audio_stream: Option<AudioStreamOwner>,
     sample_rate: Option<u32>,
-    // buffer: VecDeque<StereoFrame>,
+    // buffer: Vec<i16>,
 }
 
 impl App {
     /// Returns a result with an App with default configuration
-    pub fn default() -> Result<Self, String> {
+    pub fn default() -> SdlResult<App> {
         Self::new(
             "App",
             320,
@@ -136,25 +131,22 @@ impl App {
         timing: Timing,
         scaling: Scaling,
         sample_rate: Option<u32>,
-    ) -> Result<Self, String> {
-        sdl2::hint::set("SDL_JOYSTICK_THREAD", "1");
+    ) -> SdlResult<App> {
+        // sdl3::hint::set("SDL_JOYSTICK_THREAD", "1");
+        let context = sdl3::init()?;
 
-        let context = sdl2::init()?;
-        let video_subsystem = context.video()?;
-
-        let game_controller_subsystem = context.game_controller()?;
-        let available = game_controller_subsystem
-            .num_joysticks()
-            .map_err(|e| format!("MiniSDL: Can't enumerate joysticks: {}", e))?;
+        // Game controller
+        let gamepad_subsystem = context.gamepad()?;
+        let available = gamepad_subsystem.num_gamepads()?;
         println!("MiniSDL: {} joysticks available", available);
 
         // Iterate over all available joysticks and look for game controllers.
         let controller_1 = (0..available).find_map(|id| {
-            if !game_controller_subsystem.is_game_controller(id) {
+            if !gamepad_subsystem.is_game_controller(id) {
                 println!("MiniSDL: {} is not a game controller", id);
                 return None;
             }
-            match game_controller_subsystem.open(id) {
+            match gamepad_subsystem.open(id) {
                 Ok(c) => {
                     println!("MiniSDL: Opened joystick {} as \"{}\"", id, c.name());
                     Some(c)
@@ -165,82 +157,63 @@ impl App {
                 }
             }
         });
-        // .expect("MiniSDL: Couldn't open any controller");
-        // println!("Controller mapping: {:#?}", controller.mapping());
 
+        // Video & Window
+        let video_subsystem = context.video()?;
         let window = video_subsystem
             .window(name, width * 2, height * 2)
-            .allow_highdpi()
+            .high_pixel_density()
             .position_centered()
             .resizable()
-            .build()
-            .map_err(|e| e.to_string())?;
+            .build()?;
 
         let canvas = match timing {
-            Timing::Vsync | Timing::VsyncLimitFPS(_) => {
-                window.into_canvas().accelerated().present_vsync()
-            }
-            Timing::Immediate | Timing::ImmediateLimitFPS(_) => window.into_canvas().accelerated(),
-        }
-        .build()
-        .map_err(|e| e.to_string())?;
-
-        use sdl2::sys::SDL_WindowFlags::*;
-        let dpi_mult = if (canvas.window().window_flags() & SDL_WINDOW_ALLOW_HIGHDPI as u32) != 0 {
-            2.0
-        } else {
-            1.0
+            Timing::Vsync | Timing::VsyncLimitFPS(_) => window.into_canvas(),
+            Timing::Immediate | Timing::ImmediateLimitFPS(_) => window.into_canvas(),
         };
 
+        let dpi_mult = 2.0; // TODO: Will need to check in SDL3
+                            // use sdl3::sys::SDL_WindowFlags::*;
+                            // let dpi_mult = if (canvas.window().window_flags() & WINDOW_ALLOW_HIGHDPI as u32) != 0 {
+                            //     2.0
+                            // } else {
+                            //     1.0
+                            // };
+
         let texture_creator = canvas.texture_creator();
-        let render_texture = texture_creator
-            .create_texture(
-                Some(PixelFormatEnum::RGB24),
-                TextureAccess::Streaming,
-                width,
-                height,
-            )
-            .map_err(|e| e.to_string())?;
 
-        let render_target = texture_creator
-            .create_texture(
-                Some(PixelFormatEnum::RGB24),
-                TextureAccess::Target,
-                width,
-                height,
-            )
-            .map_err(|e| e.to_string())?;
+        let pixel_buffer = texture_creator.create_texture_streaming(
+            unsafe { PixelFormat::from_ll(SDL_PixelFormat::RGB24) },
+            width,
+            height,
+        )?;
 
+        let render_target = texture_creator.create_texture_target(
+            unsafe { PixelFormat::from_ll(SDL_PixelFormat::RGB24) },
+            width,
+            height,
+        )?;
 
-
-
-        let mut audio_device = None;
+        // let mut audio_device = None;
+        let mut audio_stream = None;
         if let Some(sample_rate) = sample_rate {
             //Sound init
-            let sample_count = match timing {
-                Timing::Immediate | Timing::Vsync => {
-                    u16::try_from(prev_power_of_two((sample_rate / 60) * 2))
-                        .unwrap()
-                        .clamp(1024, 8192)
-                }
-                Timing::VsyncLimitFPS(limit) | Timing::ImmediateLimitFPS(limit) => {
-                    u16::try_from(prev_power_of_two((sample_rate as f64 / limit) as u32 * 2))
-                        .unwrap()
-                        .clamp(1024, 8192)
-                }
-            };
-            let desired_spec = AudioSpecDesired {
+            let spec = AudioSpec {
                 freq: Some(sample_rate as i32),
                 channels: Some(2),
-                samples: Some(sample_count),
+                format: Some(AudioFormat::s16_sys()),
             };
             let audio_subsystem = context.audio()?;
-            let device = audio_subsystem.open_playback(None, &desired_spec, |spec| {
-                println!("{:?}", spec);
-                AudioInput::new(sample_count)
-            })?;
-            audio_device = Some(device);
 
+            // let device = audio_subsystem.open_queue::<i16, _>(None, &desired_spec)?;
+
+            // let device =
+            //     audio_subsystem.open_playback_stream(&desired_spec, AudioPlayback::new())?;
+            //
+            let device = audio_subsystem.open_playback_device(&spec)?;
+            let stream = device.open_device_stream(Some(&spec))?;
+            audio_stream = Some(stream);
+            // audio_device = Some(device);
         }
 
         let events = context.event_pump()?;
@@ -264,7 +237,7 @@ impl App {
             timing,
             scaling,
             canvas,
-            render_texture,
+            pixel_buffer,
             render_target,
             context,
             events,
@@ -272,10 +245,13 @@ impl App {
             allow_analog_to_dpad_x: false,
             allow_analog_to_dpad_y: false,
             texture_creator,
+            // Audio
             sample_rate,
-            audio_device,
+            // audio_device,
+            audio_stream,
+            // Optional features
             #[cfg(feature = "ttf")]
-            fonts: sdl2::ttf::init().map_err(|e| e.to_string())?,
+            fonts: sdl3::ttf::init()?,
             #[cfg(feature = "ttf")]
             default_font: None,
             #[cfg(feature = "ttf")]
@@ -285,7 +261,7 @@ impl App {
             #[cfg(feature = "ttf")]
             overlay_scale: 1.0,
             #[cfg(feature = "ttf")]
-            overlay_coords: sdl2::rect::Point::new(16, 16),
+            overlay_coords: sdl3::rect::Point::new(16, 16),
         })
     }
 
@@ -347,16 +323,22 @@ impl App {
 
     #[cfg(feature = "ttf")]
     /// Loads a TTF font and converts it to a FontAtlas of fixed size.
-    pub fn font_load<P>(&mut self, path: P, size: u16) -> Result<FontAtlas, String>
+    pub fn font_load<P>(&mut self, path: P, size: f32, line_spacing: f32) -> SdlResult<FontAtlas>
     where
         P: AsRef<std::path::Path>,
     {
-        FontAtlas::new(path, size, &self.fonts, &mut self.texture_creator)
+        FontAtlas::new(
+            path,
+            size,
+            line_spacing,
+            &self.fonts,
+            &mut self.texture_creator,
+        )
     }
 
     /// Required at the start of a frame loop, performs basic timing math, clears the canvas and
     /// updates self.apad with the current values.
-    pub fn frame_start(&mut self) -> SdlResult {
+    pub fn frame_start(&mut self) -> SdlResult<()> {
         // Whole frame time.
         self.elapsed_time_raw = self.frame_start.elapsed().as_secs_f64();
         self.elapsed_time = match self.timing {
@@ -373,7 +355,7 @@ impl App {
 
         for event in self.events.poll_iter() {
             use padstate::Button as butt;
-            use sdl2::controller::Button::*;
+            use sdl3::gamepad::Button::*;
             match event {
                 Event::ControllerAxisMotion {
                     axis,
@@ -381,7 +363,7 @@ impl App {
                     which: _,
                     value,
                 } => {
-                    use sdl2::controller::Axis::*;
+                    use sdl3::gamepad::Axis::*;
                     const AXIS_DEAD_ZONE: i16 = 8000;
                     match axis {
                         LeftX => {
@@ -421,10 +403,10 @@ impl App {
                     DPadDown => self.apad.set_button(butt::Down, true),
                     DPadLeft => self.apad.set_button(butt::Left, true),
                     DPadRight => self.apad.set_button(butt::Right, true),
-                    A => self.apad.set_button(butt::A, true),
-                    B => self.apad.set_button(butt::B, true),
-                    X => self.apad.set_button(butt::X, true),
-                    Y => self.apad.set_button(butt::Y, true),
+                    South => self.apad.set_button(butt::A, true),
+                    East => self.apad.set_button(butt::B, true),
+                    West => self.apad.set_button(butt::X, true),
+                    North => self.apad.set_button(butt::Y, true),
                     // LeftStick => self.apad.set_button(butt::LeftTrigger, true),
                     LeftShoulder => self.apad.set_button(butt::LeftShoulder, true),
                     // RightStick => self.apad.set_button(butt::RightTrigger, true),
@@ -439,10 +421,10 @@ impl App {
                     DPadDown => self.apad.set_button(butt::Down, false),
                     DPadLeft => self.apad.set_button(butt::Left, false),
                     DPadRight => self.apad.set_button(butt::Right, false),
-                    A => self.apad.set_button(butt::A, false),
-                    B => self.apad.set_button(butt::B, false),
-                    X => self.apad.set_button(butt::X, false),
-                    Y => self.apad.set_button(butt::Y, false),
+                    South => self.apad.set_button(butt::A, false),
+                    East => self.apad.set_button(butt::B, false),
+                    West => self.apad.set_button(butt::X, false),
+                    North => self.apad.set_button(butt::Y, false),
                     LeftStick => self.apad.set_button(butt::LeftTrigger, false),
                     LeftShoulder => self.apad.set_button(butt::LeftShoulder, false),
                     RightStick => self.apad.set_button(butt::RightTrigger, false),
@@ -454,13 +436,10 @@ impl App {
                 },
                 Event::KeyDown {
                     keycode,
-                    repeat,
+                    repeat: false,
                     keymod,
                     ..
                 } => {
-                    if repeat {
-                        continue;
-                    }
                     match keycode {
                         Option::None => {}
                         Some(Keycode::Up) => self.apad.set_button(butt::Up, true),
@@ -468,16 +447,16 @@ impl App {
                         Some(Keycode::Left) => self.apad.set_button(butt::Left, true),
                         Some(Keycode::Right) => self.apad.set_button(butt::Right, true),
                         Some(Keycode::X) => self.apad.set_button(butt::A, true),
-                        Some(Keycode::S) => self.apad.set_button(butt::B, true),
-                        Some(Keycode::Z) => self.apad.set_button(butt::X, true),
+                        Some(Keycode::Z) => self.apad.set_button(butt::B, true),
                         Some(Keycode::A) => self.apad.set_button(butt::Y, true),
-                        Some(Keycode::NUM_1) => self.apad.set_button(butt::LeftTrigger, true),
+                        Some(Keycode::S) => self.apad.set_button(butt::X, true),
+                        Some(Keycode::_1) => self.apad.set_button(butt::LeftTrigger, true),
                         Some(Keycode::Q) => self.apad.set_button(butt::LeftShoulder, true),
-                        Some(Keycode::NUM_2) => self.apad.set_button(butt::RightTrigger, true),
+                        Some(Keycode::_2) => self.apad.set_button(butt::RightTrigger, true),
                         Some(Keycode::W) => self.apad.set_button(butt::RightShoulder, true),
-                        Some(Keycode::TAB) => self.apad.set_button(butt::Select, true),
-                        Some(Keycode::RETURN) => self.apad.set_button(butt::Start, true),
-                        Some(Keycode::ESCAPE) => self.apad.set_button(butt::Menu, true),
+                        Some(Keycode::Tab) => self.apad.set_button(butt::Select, true),
+                        Some(Keycode::Return) => self.apad.set_button(butt::Start, true),
+                        Some(Keycode::Escape) => self.apad.set_button(butt::Menu, true),
                         Some(Keycode::O) => {
                             if keymod == Mod::LCTRLMOD {
                                 self.display_overlay = !self.display_overlay
@@ -487,11 +466,10 @@ impl App {
                     }
                 }
                 Event::KeyUp {
-                    keycode, repeat, ..
+                    keycode,
+                    repeat: false,
+                    ..
                 } => {
-                    if repeat {
-                        continue;
-                    }
                     match keycode {
                         Option::None => {}
                         Some(Keycode::Up) => self.apad.set_button(butt::Up, false),
@@ -499,16 +477,16 @@ impl App {
                         Some(Keycode::Left) => self.apad.set_button(butt::Left, false),
                         Some(Keycode::Right) => self.apad.set_button(butt::Right, false),
                         Some(Keycode::X) => self.apad.set_button(butt::A, false),
-                        Some(Keycode::S) => self.apad.set_button(butt::B, false),
-                        Some(Keycode::Z) => self.apad.set_button(butt::X, false),
+                        Some(Keycode::Z) => self.apad.set_button(butt::B, false),
                         Some(Keycode::A) => self.apad.set_button(butt::Y, false),
-                        Some(Keycode::NUM_1) => self.apad.set_button(butt::LeftTrigger, false),
+                        Some(Keycode::S) => self.apad.set_button(butt::X, false),
+                        Some(Keycode::_1) => self.apad.set_button(butt::LeftTrigger, false),
                         Some(Keycode::Q) => self.apad.set_button(butt::LeftShoulder, false),
-                        Some(Keycode::NUM_2) => self.apad.set_button(butt::RightTrigger, false),
+                        Some(Keycode::_2) => self.apad.set_button(butt::RightTrigger, false),
                         Some(Keycode::W) => self.apad.set_button(butt::RightShoulder, false),
-                        Some(Keycode::TAB) => self.apad.set_button(butt::Select, false),
-                        Some(Keycode::RETURN) => self.apad.set_button(butt::Start, false),
-                        Some(Keycode::ESCAPE) => self.apad.set_button(butt::Menu, false),
+                        Some(Keycode::Tab) => self.apad.set_button(butt::Select, false),
+                        Some(Keycode::Return) => self.apad.set_button(butt::Start, false),
+                        Some(Keycode::Escape) => self.apad.set_button(butt::Menu, false),
                         Some(_) => {} // ignore the rest
                     }
                 }
@@ -523,13 +501,11 @@ impl App {
     }
 
     /// Uses SDL's "texture.with_lock" function to access the pixel buffer as an RGB array.
-    pub fn pixel_buffer_update<F, R>(&mut self, func: F) -> SdlResult
+    pub fn pixel_buffer_update<F, R>(&mut self, func: F) -> SdlResult<()>
     where
         F: FnOnce(&mut [u8], usize) -> R,
     {
-        if let Err(text) = self.render_texture.with_lock(None, func) {
-            return Err(text);
-        }
+        self.pixel_buffer.with_lock(None, func)?;
         Ok(())
     }
 
@@ -558,18 +534,18 @@ impl App {
     }
 
     /// Presents the current pixel buffer respecting the scaling strategy.
-    pub fn pixel_buffer_present(&mut self) -> SdlResult {
-        let rect = self.get_scaled_rect();
+    pub fn pixel_buffer_present(&mut self) -> SdlResult<()> {
+        let rect = self.get_scaled_rect().unwrap(); // TODO: Clean up unwrap
         self.canvas
-            .copy_ex(&self.render_texture, None, rect, 0.0, None, false, false)?;
+            .copy_ex(&self.pixel_buffer, None, rect, 0.0, None, false, false)?;
         Ok(())
     }
 
     /// Presents the render target to the canvas respecting the scaling strategy.
     /// Warning: can be much slower than "pixel_buffer_present" if the goal is to simply
     /// draw pixel-by-pixel.
-    pub fn render_target_present(&mut self) -> SdlResult {
-        let rect = self.get_scaled_rect();
+    pub fn render_target_present(&mut self) -> SdlResult<()> {
+        let rect = self.get_scaled_rect().unwrap(); // TODO: Clean up unwrap
         self.canvas
             .copy_ex(&self.render_target, None, rect, 0.0, None, false, false)?;
         Ok(())
@@ -578,7 +554,7 @@ impl App {
     /// Required to be called at the end of a frame loop. Presents the canvas and performs an idle wait
     /// if frame rate limiting is required. Ironically, performing this idle loop may *lower* the CPU
     /// use in some platforms, compared to pure VSync!
-    pub fn frame_finish(&mut self) -> SdlResult {
+    pub fn frame_finish(&mut self) -> SdlResult<()> {
         if self.app_time.elapsed().as_secs_f32() > 0.5 {
             // Skips the first frames
             self.update_time_buffer
@@ -602,7 +578,7 @@ impl App {
                         )?;
                         let inc =
                             (font.height() as f32 * self.overlay_line_spacing) * self.overlay_scale;
-                        y += inc as i32;
+                        y += (inc * font.line_spacing) as i32;
                     }
                 }
             }
@@ -659,17 +635,21 @@ impl App {
 
     // Audio
     /// Initiates playback of audio device.
-    pub fn audio_start(&mut self) {
-        if let Some(audio) = &mut self.audio_device {
-            audio.resume();
+    pub fn audio_start(&mut self) -> SdlResult<()> {
+        if let Some(audio) = &mut self.audio_stream {
+            audio.resume()?;
+            // audio.resume();
         }
+        Ok(())
     }
 
     /// Pauses playback of audio device.
-    pub fn audio_pause(&mut self) {
-        if let Some(audio) = &mut self.audio_device {
-            audio.pause()
+    pub fn audio_pause(&mut self) -> SdlResult<()> {
+        if let Some(audio) = &mut self.audio_stream {
+            audio.pause()?;
+            // audio.pause();
         }
+        Ok(())
     }
 
     /// Returns the current audio mix rate. TODO: This is locked at 44100Hz, should be user adjustable.
@@ -679,13 +659,52 @@ impl App {
 
     /// Copies a slice of StereoFrames to the audio buffer. Ideally you should call this only once per frame,
     /// with all the samples that you need for that frame.
-    pub fn audio_push_samples(&mut self, samples: &[StereoFrame]) -> SdlResult {
-        let Some(audio_device) = &mut self.audio_device else {
-            return Err("Audio device not found".to_string());
+    pub fn audio_push_samples(&mut self, samples: &[i16]) -> SdlResult<()> {
+        let Some(stream) = &mut self.audio_stream else {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "Audio device not found",
+            )));
         };
-        let mut audio = audio_device.lock();
-        audio.push_samples(samples);
+
+        stream.put_data_i16(samples)?;
         Ok(())
+    }
+
+    /// Estimates how many stereo frames to fill the buffer at the current frame,
+    /// with minimum lag and without audio cut-offs.
+    pub fn audio_samples_per_frame(&self) -> Option<usize> {
+        let sample_rate = self.sample_rate?;
+        let queued_samples = (sample_rate as f64 * self.elapsed_time_raw) as usize;
+
+        // Calculate ideal number of samples based on elapsed time
+        let ideal_samples = (sample_rate as f64 * self.elapsed_time_raw) as usize;
+
+        // Adjust buffer length based on frame rate
+        // Use minimum of 0.01s at high frame rates, but increase more aggressively at lower frame rates
+        let fps = self.fps();
+        let buffer_len = if fps >= 120.0 {
+            0.01 // Minimum buffer at high frame rates (120+ FPS)
+        } else {
+            // Aggressive increase at lower frame rates
+            // This gives 0.01s at 120fps, increases gradually at lower framerates
+            0.01 * (120.0 / fps.max(1.0)).powf(1.5).min(10.0) // Cap at 10x increase (0.1s)
+        };
+
+        let buffer_target = (sample_rate as f64 * buffer_len) as usize;
+
+        if queued_samples > buffer_target {
+            // Buffer growing too large, generate fewer samples
+            let overflow = queued_samples - buffer_target;
+            if overflow >= ideal_samples {
+                None // Don't generate any samples this frame
+            } else {
+                Some(ideal_samples - overflow)
+            }
+        } else {
+            // Buffer is small enough, generate normal amount
+            Some(ideal_samples)
+        }
     }
 }
 
@@ -716,15 +735,15 @@ pub(crate) fn next_power_of_two(mut n: u32) -> u32 {
     n
 }
 
-pub(crate) fn prev_power_of_two(n: u32) -> u32 {
-    if n.is_power_of_two() {
-        return n;
-    }
-    let mut x = n;
-    x |= x >> 1;
-    x |= x >> 2;
-    x |= x >> 4;
-    x |= x >> 8;
-    x |= x >> 16;
-    (x >> 1) + 1
-}
+// pub(crate) fn prev_power_of_two(n: u32) -> u32 {
+//     if n.is_power_of_two() {
+//         return n;
+//     }
+//     let mut x = n;
+//     x |= x >> 1;
+//     x |= x >> 2;
+//     x |= x >> 4;
+//     x |= x >> 8;
+//     x |= x >> 16;
+//     (x >> 1) + 1
+// }

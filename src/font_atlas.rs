@@ -1,13 +1,14 @@
-use sdl2::{
-    pixels::Color,
+use crate::{next_power_of_two, SdlResult};
+use sdl3::{
+    pixels::{Color, PixelFormat},
     rect::Rect,
     render::{Canvas, Texture, TextureCreator},
     surface::Surface,
-    ttf::Sdl2TtfContext,
+    sys::pixels::SDL_PixelFormat,
+    ttf::Sdl3TtfContext,
     video::{Window, WindowContext},
 };
 use std::{collections::HashMap, path::Path};
-use crate::{next_power_of_two, SdlResult};
 
 const CHARACTERS: &'static str =
     "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz!@#$%^&*()-_=+,.:;'~? ";
@@ -17,19 +18,21 @@ const CHARACTERS: &'static str =
 pub struct FontAtlas {
     pub texture: Texture,
     pub color: Color,
-    height: u16,
+    // TODO: Multi line drawing with proper loine spacing
+    pub line_spacing: f32, // Draw does not break lines yet! Stored here for convenience.
+    height: f32,
     rects: HashMap<char, Rect>,
 }
-
 
 impl FontAtlas {
     pub fn new(
         path: impl AsRef<Path>,
-        size: u16,
-        ttf: &Sdl2TtfContext,
+        size: f32,
+        line_spacing: f32,
+        ttf: &Sdl3TtfContext,
         texture_creator: &mut TextureCreator<WindowContext>,
-    ) -> Result<Self, String> {
-        let ttf_font = ttf.load_font(path, size).map_err(|e| e.to_string())?;
+    ) -> SdlResult<Self> {
+        let ttf_font = ttf.load_font(path, size)?;
 
         // Obtain character metrics, populate rects and chars vectors in the same order.
         let mut char_rects = vec![];
@@ -39,7 +42,7 @@ impl FontAtlas {
             let Some(m) = ttf_font.find_glyph_metrics(ch) else {
                 continue;
             };
-            let w = m.advance as u32;// + m.minx.abs() as u32; // Removed since it was breaking a mono-spaced font, needs more testing
+            let w = m.advance as u32; // + m.minx.abs() as u32; // Removed since it was breaking a mono-spaced font, needs more testing
             let h = ttf_font.height() - m.miny.abs();
             let y = m.miny.abs();
             let rect = Rect::new(x, y, w, h as u32);
@@ -55,15 +58,17 @@ impl FontAtlas {
         for ch in CHARACTERS.chars() {
             let surf = ttf_font
                 .render_char(ch)
-                .blended(Color::RGBA(255, 255, 255, 255))
-                .map_err(|e| e.to_string())?;
+                // .lcd(Color::RGBA(255, 255, 255, 255), Color::RGBA(0, 0, 0, 255))?;
+                .blended(Color::RGBA(255, 255, 255, 255))?;
             pixel_count += surf.width() * surf.height();
             surfaces.push(surf);
         }
 
         // Combine all character surfaces into a single atlas surface
         let res = next_power_of_two((pixel_count as f32).sqrt().ceil() as u32);
-        let mut atlas = Surface::new(res, res, sdl2::pixels::PixelFormatEnum::RGBA8888)?;
+        let mut atlas = Surface::new(res, res, unsafe {
+            PixelFormat::from_ll(SDL_PixelFormat::RGBA32)
+        })?;
         let mut rects = HashMap::new();
         let mut row_height = 0;
         let mut x = 0;
@@ -90,20 +95,20 @@ impl FontAtlas {
         }
 
         // Generate texture from surface
-        let texture = texture_creator
-            .create_texture_from_surface(&atlas)
-            .map_err(|e| e.to_string())?;
+        let texture = texture_creator.create_texture_from_surface(&atlas)?;
+        // texture.set_scale_mode(ScaleMode::Nearest);
 
         // Finish
         Ok(Self {
             texture,
             rects,
             height: size,
+            line_spacing,
             color: Color::WHITE,
         })
     }
 
-    pub fn height(&self) -> u16 {
+    pub fn height(&self) -> f32 {
         self.height
     }
 
@@ -114,7 +119,7 @@ impl FontAtlas {
         y: i32,
         scale: f32,
         canvas: &mut Canvas<Window>,
-    ) -> SdlResult {
+    ) -> SdlResult<()> {
         let text: String = text.into();
         let mut x = x;
 
@@ -129,7 +134,7 @@ impl FontAtlas {
                     (rect.width() as f32 * scale.abs()) as u32,
                     (rect.height() as f32 * scale.abs()) as u32,
                 );
-                canvas.copy(&self.texture, Some(*rect), Some(dest))?;
+                canvas.copy(&self.texture, *rect, dest)?;
                 x += rect.w * scale as i32;
             }
         }

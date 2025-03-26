@@ -1,7 +1,7 @@
 use mini_sdl::*;
-use sdl2::pixels::Color;
+use sdl3::pixels::Color;
 
-fn main() -> SdlResult {
+fn main() -> SdlResult<()> {
     let mut app = mini_sdl::App::new(
         "test",
         320,
@@ -14,7 +14,8 @@ fn main() -> SdlResult {
     println!("Current dir is:{:?}", std::env::current_dir());
     println!("Please run this example from the mini_sdl root using 'cargo run -p example_font'");
     println!("Otherwise the font file will not be found!");
-    let mut font = app.font_load("example_font/src/classic-display/classic-display.ttf", 16)?;
+
+    let mut font = app.font_load("example_font/src/roboto_medium.ttf", 16.0, 1.0)?;
 
     let mut buttons = Vec::<Button>::new();
 
@@ -52,29 +53,33 @@ fn main() -> SdlResult {
                 font.color = Color::RGB(245, 250, 255);
 
                 // Buttons
-                let mut y = 22;
-                font.draw("Current buttons:", 20, y, 2.0, target).ok();
+                let line_space = 20;
+                let mut y = 10;
+                font.draw("Current buttons:", 20, y, 1.0, target).ok();
                 for button in &buttons {
-                    y += 22;
-                    font.draw(format!("{:?}", button), 20, y, 2.0, target).ok();
+                    y += line_space;
+                    font.draw(format!("{:?}", button), 20, y, 1.0, target).ok();
                 }
 
                 // Left stick
                 let dead_zone = 0.05;
                 let stick_x = app.apad.left_stick_x();
                 if stick_x > dead_zone || stick_x < -dead_zone {
-                    y += 22;
-                    font.draw(format!("Stick X: {:1?}", stick_x), 20, y, 2.0, target).ok();
+                    y += line_space;
+                    font.draw(format!("Stick X: {:1?}", stick_x), 20, y, 1.0, target)
+                        .ok();
                 }
                 let stick_y = app.apad.left_stick_y();
                 if stick_y > dead_zone || stick_y < -dead_zone {
-                    y += 22;
-                    font.draw(format!("Stick Y: {:1?}", stick_y), 20, y, 2.0, target).ok();
+                    y += line_space;
+                    font.draw(format!("Stick Y: {:1?}", stick_y), 20, y, 1.0, target)
+                        .ok();
                 }
-            })
-            .map_err(|e| e.to_string())?;
-        // Present target to canvas, keep drawing directly on canvas.
+            });
+
+        // Present target to canvas.
         app.render_target_present()?;
+
         // Present canvas
         app.frame_finish()?;
     }
