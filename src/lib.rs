@@ -680,8 +680,18 @@ impl App {
         // Calculate ideal number of samples based on elapsed time
         let ideal_samples = (sample_rate as f64 * self.elapsed_time_raw) as usize;
 
-        // Adjust for existing buffer content - if buffer has grown too large, reduce samples
-        let buffer_target = (sample_rate as f64 * 0.02) as usize; // 20ms buffer
+        // Adjust buffer length based on frame rate
+        // Use minimum of 0.01s at high frame rates, but increase more aggressively at lower frame rates
+        let fps = self.fps();
+        let buffer_len = if fps >= 120.0 {
+            0.01 // Minimum buffer at high frame rates (120+ FPS)
+        } else {
+            // Aggressive increase at lower frame rates
+            // This gives 0.01s at 120fps, increases gradually at lower framerates
+            0.01 * (120.0 / fps.max(1.0)).powf(1.5).min(10.0) // Cap at 10x increase (0.1s)
+        };
+
+        let buffer_target = (sample_rate as f64 * buffer_len) as usize;
 
         if queued_samples > buffer_target {
             // Buffer growing too large, generate fewer samples
