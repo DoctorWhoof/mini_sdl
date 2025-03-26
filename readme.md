@@ -1,16 +1,16 @@
-# A simple wrapper around SDL2.
+# A simple wrapper around SDL3.
 
 This is an early publish of a work-in-progress crate. Use with discretion.
 
-### This crate assumes you've already installed SDL2 on your system (i.e. 'brew install sdl3' on MacOS). It wil not run if SDL2 isn't found.
+### This crate assumes you've already installed SDL3 on your system (i.e. 'brew install sdl3' on MacOS). It wil not run if SDL3 isn't found.
 
 Designed primarily to provide raw access to an RGB pixel buffer and display its contents correctly, with timing options like Vsync and frame rate limiting, and scaling options like Aspect Ratio and integer scaling.
 
-I decided to make this crate after spending an entire weekend testing multiple libraries that could potentially perform this task, but failed to either perform well or present the frames with proper frame pacing. SDL2 was the only high-level library that satisfied all requirements, but turned out to be the most complex to use, so wrapping it in something much simpler can be of value to many people who just want a "framebuffer" to write pixels to.
+I decided to make this crate after spending an entire weekend testing multiple libraries that could potentially perform this task, but failed to either perform well or present the frames with proper frame pacing. SDL3 was the only high-level library that satisfied all requirements, but turned out to be the most complex to use, so wrapping it in something much simpler can be of value to many people who just want a "framebuffer" to write pixels to.
 
-The main goal is to favor simplicity over features. With that said, it will expand in the future, providing access to other basic SDL2 features like sound.
+The main goal is to favor simplicity over features. With that said, it will expand in the future, providing access to other basic SDL3 features like sound.
 
-_Warning_: Some SDL2 internals are exposed as public members, but this kind of access is _untested_.
+_Warning_: Some SDL3 internals are exposed as public members, but this kind of access is _untested_.
 
 ## Example
 
@@ -61,10 +61,10 @@ fn main() -> SdlResult<()> {
 
 ### Static Builds
 
-To build statically, run the 'cargo build' command preceded by these flags which will point out where "sdl3" and "sdl2_ttf" are:
+To build statically, run the 'cargo build' command preceded by these flags which will point out where "sdl3" and "SDL3_ttf" are:
 
 ```bash
-RUSTFLAGS='-L /opt/homebrew/Cellar/sdl3/2.30.8/lib -L /opt/homebrew/Cellar/sdl2_ttf/2.22.0/lib' cargo build
+RUSTFLAGS='-L /opt/homebrew/Cellar/sdl3/2.30.8/lib -L /opt/homebrew/Cellar/SDL3_ttf/2.22.0/lib' cargo build
 ```
 
 Replace the paths with ones valid for your system, then add the "static-link" feature to cargo.toml.
