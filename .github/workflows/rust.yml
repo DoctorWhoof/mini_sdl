@@ -13,7 +13,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update -y -qq
-          sudo apt-get install -y libsdl3-dev libsdl3-mixer-dev libsdl3-gfx-dev libsdl3-image-dev libsdl3-ttf-dev
+          sudo apt-get install -y libsdl3-dev libsdl3-ttf-dev
           sudo apt-get install libopenal1 libopenal-dev
       - name: Build mini_sdl
         shell: bash
