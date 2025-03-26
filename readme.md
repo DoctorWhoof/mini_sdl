@@ -64,7 +64,9 @@ fn main() -> SdlResult<()> {
 To build statically, run the 'cargo build' command preceded by these flags which will point out where "sdl3" and "SDL3_ttf" are:
 
 ```bash
-RUSTFLAGS='-L /opt/homebrew/Cellar/sdl3/2.30.8/lib -L /opt/homebrew/Cellar/SDL3_ttf/2.22.0/lib' cargo build
+RUSTFLAGS='-L /opt/homebrew/Cellar/sdl3/2.30.8/lib -L /opt/homebrew/Cellar/sdl3/3.2.8/lib' cargo build
 ```
 
 Replace the paths with ones valid for your system, then add the "static-link" feature to cargo.toml.
+You can find the current path via 'brew info sdl3', if you've installed sdl3 with homebrew.
+
