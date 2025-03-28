@@ -7,12 +7,12 @@ fn main() -> SdlResult<()> {
         320,
         240,
         Timing::VsyncLimitFPS(60.0),
-        Scaling::PreserveAspect,
-        None,
+        Scaling::PreserveAspect
     )?;
 
     app.default_font = Some(app.font_load("example_overlay/src/roboto_medium.ttf", 36.0, 1.25)?);
     app.overlay_scale = 1.0;
+    app.init_render_target()?;
 
     while !app.quit_requested {
         app.frame_start()?;
@@ -22,8 +22,12 @@ fn main() -> SdlResult<()> {
         app.overlay_push("Useful for things like showing the FPS...");
         app.overlay_push(format!("FPS: {}", app.fps()));
         // Draw directly to the render_target
+        let Some(render_target) = &mut app.render_target else {
+            println!("Render target not found");
+            break
+        };
         app.canvas
-            .with_texture_canvas(&mut app.render_target, |texture_canvas| {
+            .with_texture_canvas(render_target, |texture_canvas| {
                 texture_canvas.set_draw_color(Color::RGBA(100, 100, 100, 255));
                 texture_canvas.clear();
                 texture_canvas.set_draw_color(Color::RGBA(200, 120, 0, 255));

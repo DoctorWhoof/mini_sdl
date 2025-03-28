@@ -30,6 +30,7 @@ fn main() -> SdlResult<()> {
         None                            // Audio sampling rate, if audio is desired.
     )?;
 
+    app.init_pixel_buffer()?;
     app.print_fps_interval = Some(1.0);
 
     while !app.quit_requested {
@@ -69,4 +70,3 @@ RUSTFLAGS='-L /opt/homebrew/Cellar/sdl3/2.30.8/lib -L /opt/homebrew/Cellar/sdl3/
 
 Replace the paths with ones valid for your system, then add the "static-link" feature to cargo.toml.
 You can find the current path via 'brew info sdl3', if you've installed sdl3 with homebrew.
-

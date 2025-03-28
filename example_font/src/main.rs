@@ -9,9 +9,9 @@ fn main() -> SdlResult<()> {
         320,
         240,
         Timing::VsyncLimitFPS(60.0),
-        Scaling::PreserveAspect,
-        None,
+        Scaling::PreserveAspect
     )?;
+    app.init_render_target()?;
 
     println!("Current dir is:{:?}", std::env::current_dir());
     println!("Please run this example from the mini_sdl root using 'cargo run -p example_font'");
@@ -23,8 +23,12 @@ fn main() -> SdlResult<()> {
     while !app.quit_requested {
         app.frame_start()?;
         // Draw to render_target
+        let Some(render_target) = &mut app.render_target else {
+            println!("Render target not found");
+            break
+        };
         app.canvas
-            .with_texture_canvas(&mut app.render_target, |target| {
+            .with_texture_canvas(render_target, |target| {
                 target.set_draw_color((38, 36, 35, 255));
                 target.clear();
                 target.set_draw_color((0, 0, 0, 255));

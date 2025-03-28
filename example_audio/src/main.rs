@@ -1,5 +1,4 @@
 use mini_sdl::*;
-use std::io::{Error, ErrorKind::NotFound};
 use std::{f64::consts::TAU, i16};
 
 fn main() -> SdlResult<()> {
@@ -8,13 +7,10 @@ fn main() -> SdlResult<()> {
         320,
         240,
         Timing::VsyncLimitFPS(60.0),
-        Scaling::PreserveAspect,
-        Some(44100),
+        Scaling::PreserveAspect
     )?;
 
-    let Some(sample_rate) = app.audio_mixrate() else {
-        return Err(Box::new(Error::new(NotFound, "No Audio device")));
-    };
+    let sample_rate = 48000;
 
     let rate = sample_rate as f64;
     let frequency = 440.0; // 440Hz, frequency of note A4
@@ -22,7 +18,7 @@ fn main() -> SdlResult<()> {
     let time_per_sample = 1.0 / rate; // Time duration of one sample
     let mut accumulated_phase = 0.0;
 
-    app.audio_start()?;
+    app.audio_init(sample_rate)?;
 
     while !app.quit_requested {
         app.frame_start()?;

@@ -7,6 +7,7 @@ use sdl3::audio::{AudioFormat, AudioSpec, AudioStreamOwner};
 use sdl3::gamepad::Gamepad;
 use sdl3::pixels::PixelFormat;
 use sdl3::sys::pixels::SDL_PixelFormat;
+use sdl3::AudioSubsystem;
 pub use smooth_buffer::SmoothBuffer;
 pub use smooth_buffer::{Float, Num};
 
@@ -42,7 +43,7 @@ pub struct App {
     /// Set to true to quit App on the next update.
     pub quit_requested: bool,
     /// Tiny struct that contains the state of a virtual Gamepad.
-    pub apad: APad,
+    pub pad: APad,
     /// Minimum sleep time when limiting fps. The smaller it is, the more accurate it will be,
     /// but some platforms (Windows...) seem to struggle with that.
     pub idle_increments_microsecs: u64,
@@ -65,28 +66,15 @@ pub struct App {
     pub controller_1: Option<Gamepad>,
     pub allow_analog_to_dpad_x: bool,
     pub allow_analog_to_dpad_y: bool,
-    /// The SDL TTF context
-    #[cfg(feature = "ttf")]
-    pub fonts: sdl3::ttf::Sdl3TtfContext,
     /// The render target with the fixed resolution specified when creating the app.
     /// This is slower than the pixel buffer if your goal is to draw pixel-by-pixel
     /// (use 'pixel_buffer_update' for that) but can use regular SDL drawing functions via
     /// "canvas.with_texture_canvas".
-    pub render_target: Texture,
-    pixel_buffer: Texture,
-    // Video
-    width: u32,
-    height: u32,
-    dpi_mult: f32,
-    timing: Timing,
-    scaling: Scaling,
-    // Timing,
-    app_time: Instant,
-    last_second: Instant,
-    frame_start: Instant,
-    update_time_buffer: SmoothBuffer<60, f64>,
-    elapsed_time: f64,     // Whole frame time at current FPS.
-    elapsed_time_raw: f64, // Elapsed time without quantizing and smoothing.
+    pub render_target: Option<Texture>,
+    pub pixel_buffer: Option<Texture>,
+    /// The SDL TTF context
+    #[cfg(feature = "ttf")]
+    pub fonts: sdl3::ttf::Sdl3TtfContext,
     // Overlay
     /// Provides a default FontAtlas for the overlay.
     #[cfg(feature = "ttf")]
@@ -103,11 +91,21 @@ pub struct App {
     #[cfg(feature = "ttf")]
     overlay: Vec<String>,
     // Audio
-    // pub audio_device: Option<AudioStreamWithCallback<AudioPlayback>>,
-    // audio_device: Option<AudioDevice>,
     pub audio_stream: Option<AudioStreamOwner>,
     sample_rate: Option<u32>,
-    // buffer: Vec<i16>,
+    // Video
+    width: u32,
+    height: u32,
+    dpi_mult: f32,
+    timing: Timing,
+    scaling: Scaling,
+    // Timing,
+    app_time: Instant,
+    last_second: Instant,
+    frame_start: Instant,
+    update_time_buffer: SmoothBuffer<60, f64>,
+    elapsed_time: f64,     // Whole frame time at current FPS.
+    elapsed_time_raw: f64, // Elapsed time without quantizing and smoothing.
 }
 
 impl App {
@@ -119,7 +117,6 @@ impl App {
             240,
             Timing::VsyncLimitFPS(60.0),
             Scaling::PreserveAspect,
-            Some(44100),
         )
     }
 
@@ -130,7 +127,6 @@ impl App {
         height: u32,
         timing: Timing,
         scaling: Scaling,
-        sample_rate: Option<u32>,
     ) -> SdlResult<App> {
         // sdl3::hint::set("SDL_JOYSTICK_THREAD", "1");
         let context = sdl3::init()?;
@@ -166,12 +162,10 @@ impl App {
             .position_centered()
             .resizable()
             .build()?;
-
         let canvas = match timing {
             Timing::Vsync | Timing::VsyncLimitFPS(_) => window.into_canvas(),
             Timing::Immediate | Timing::ImmediateLimitFPS(_) => window.into_canvas(),
         };
-
         let dpi_mult = 2.0; // TODO: Will need to check in SDL3
                             // use sdl3::sys::SDL_WindowFlags::*;
                             // let dpi_mult = if (canvas.window().window_flags() & WINDOW_ALLOW_HIGHDPI as u32) != 0 {
@@ -179,48 +173,13 @@ impl App {
                             // } else {
                             //     1.0
                             // };
-
         let texture_creator = canvas.texture_creator();
-
-        let pixel_buffer = texture_creator.create_texture_streaming(
-            unsafe { PixelFormat::from_ll(SDL_PixelFormat::RGB24) },
-            width,
-            height,
-        )?;
-
-        let render_target = texture_creator.create_texture_target(
-            unsafe { PixelFormat::from_ll(SDL_PixelFormat::RGB24) },
-            width,
-            height,
-        )?;
-
-        // let mut audio_device = None;
-        let mut audio_stream = None;
-        if let Some(sample_rate) = sample_rate {
-            //Sound init
-            let spec = AudioSpec {
-                freq: Some(sample_rate as i32),
-                channels: Some(2),
-                format: Some(AudioFormat::s16_sys()),
-            };
-            let audio_subsystem = context.audio()?;
-
-            // let device = audio_subsystem.open_queue::<i16, _>(None, &desired_spec)?;
-
-            // let device =
-            //     audio_subsystem.open_playback_stream(&desired_spec, AudioPlayback::new())?;
-            //
-            let device = audio_subsystem.open_playback_device(&spec)?;
-            let stream = device.open_device_stream(Some(&spec))?;
-            audio_stream = Some(stream);
-            // audio_device = Some(device);
-        }
 
         let events = context.event_pump()?;
 
         Ok(Self {
             quit_requested: false,
-            apad: APad::new(),
+            pad: APad::new(),
             idle_increments_microsecs: 100,
             print_fps_interval: None,
             bg_color: (0, 0, 0, 255),
@@ -237,8 +196,8 @@ impl App {
             timing,
             scaling,
             canvas,
-            pixel_buffer,
-            render_target,
+            pixel_buffer: None,
+            render_target: None,
             context,
             events,
             controller_1,
@@ -246,9 +205,8 @@ impl App {
             allow_analog_to_dpad_y: false,
             texture_creator,
             // Audio
-            sample_rate,
-            // audio_device,
-            audio_stream,
+            sample_rate: None,
+            audio_stream: None,
             // Optional features
             #[cfg(feature = "ttf")]
             fonts: sdl3::ttf::init()?,
@@ -274,6 +232,31 @@ impl App {
     pub fn height(&self) -> u32 {
         self.height
     }
+
+    /// Initializes the Pixel Buffer with the current width and height settings.
+    pub fn init_pixel_buffer(&mut self) -> SdlResult<()> {
+        let pixel_buffer = self.texture_creator.create_texture_streaming(
+            unsafe { PixelFormat::from_ll(SDL_PixelFormat::RGB24) },
+            self.width,
+            self.height,
+        )?;
+        self.pixel_buffer = Some(pixel_buffer);
+        Ok(())
+    }
+
+    /// Initializes the Render Target with the current width and height settings.
+    pub fn init_render_target(&mut self) -> SdlResult<()> {
+        let render_target = self.texture_creator.create_texture_target(
+            unsafe { PixelFormat::from_ll(SDL_PixelFormat::RGB24) },
+            self.width,
+            self.height,
+        )?;
+        self.render_target = Some(render_target);
+        Ok(())
+    }
+
+    /// Resizes the render target
+    pub fn set_size(&mut self, w: u32, h: u32) {}
 
     /// The window width, which is independent from the render target.
     pub fn window_width(&self) -> u32 {
@@ -337,10 +320,11 @@ impl App {
     }
 
     /// Required at the start of a frame loop, performs basic timing math, clears the canvas and
-    /// updates self.apad with the current values.
+    /// updates self.pad with the current values.
     pub fn frame_start(&mut self) -> SdlResult<()> {
         // Whole frame time.
         self.elapsed_time_raw = self.frame_start.elapsed().as_secs_f64();
+        self.frame_start = Instant::now();
         self.elapsed_time = match self.timing {
             Timing::Vsync | Timing::VsyncLimitFPS(_) => {
                 // Quantized to a minimum interval to ensure it exactly matches the display
@@ -348,10 +332,9 @@ impl App {
             }
             Timing::Immediate | Timing::ImmediateLimitFPS(_) => self.elapsed_time_raw,
         };
-        self.frame_start = Instant::now();
 
         // Input
-        self.apad.copy_current_to_previous_state();
+        self.pad.copy_current_to_previous_state();
 
         for event in self.events.poll_iter() {
             use padstate::Button as butt;
@@ -368,18 +351,18 @@ impl App {
                     match axis {
                         LeftX => {
                             if self.allow_analog_to_dpad_x {
-                                self.apad.set_button(butt::Left, value < -AXIS_DEAD_ZONE);
-                                self.apad.set_button(butt::Right, value > AXIS_DEAD_ZONE);
+                                self.pad.set_button(butt::Left, value < -AXIS_DEAD_ZONE);
+                                self.pad.set_button(butt::Right, value > AXIS_DEAD_ZONE);
                             } else {
-                                self.apad.left_stick_x = value;
+                                self.pad.left_stick_x = value;
                             }
                         }
                         LeftY => {
                             if self.allow_analog_to_dpad_y {
-                                self.apad.set_button(butt::Up, value < -AXIS_DEAD_ZONE);
-                                self.apad.set_button(butt::Down, value > AXIS_DEAD_ZONE);
+                                self.pad.set_button(butt::Up, value < -AXIS_DEAD_ZONE);
+                                self.pad.set_button(butt::Down, value > AXIS_DEAD_ZONE);
                             } else {
-                                self.apad.left_stick_y = value;
+                                self.pad.left_stick_y = value;
                             }
                         }
                         RightX => {
@@ -389,49 +372,49 @@ impl App {
                             // Could map to additional directional controls if needed
                         }
                         TriggerLeft => {
-                            self.apad
+                            self.pad
                                 .set_button(butt::LeftTrigger, value > AXIS_DEAD_ZONE);
                         }
                         TriggerRight => {
-                            self.apad
+                            self.pad
                                 .set_button(butt::RightTrigger, value > AXIS_DEAD_ZONE);
                         }
                     }
                 }
                 Event::ControllerButtonDown { button, .. } => match button {
-                    DPadUp => self.apad.set_button(butt::Up, true),
-                    DPadDown => self.apad.set_button(butt::Down, true),
-                    DPadLeft => self.apad.set_button(butt::Left, true),
-                    DPadRight => self.apad.set_button(butt::Right, true),
-                    South => self.apad.set_button(butt::A, true),
-                    East => self.apad.set_button(butt::B, true),
-                    West => self.apad.set_button(butt::X, true),
-                    North => self.apad.set_button(butt::Y, true),
-                    // LeftStick => self.apad.set_button(butt::LeftTrigger, true),
-                    LeftShoulder => self.apad.set_button(butt::LeftShoulder, true),
-                    // RightStick => self.apad.set_button(butt::RightTrigger, true),
-                    RightShoulder => self.apad.set_button(butt::RightShoulder, true),
-                    Guide => self.apad.set_button(butt::Menu, true),
-                    Start => self.apad.set_button(butt::Start, true),
-                    Back => self.apad.set_button(butt::Select, true),
+                    DPadUp => self.pad.set_button(butt::Up, true),
+                    DPadDown => self.pad.set_button(butt::Down, true),
+                    DPadLeft => self.pad.set_button(butt::Left, true),
+                    DPadRight => self.pad.set_button(butt::Right, true),
+                    South => self.pad.set_button(butt::A, true),
+                    East => self.pad.set_button(butt::B, true),
+                    West => self.pad.set_button(butt::X, true),
+                    North => self.pad.set_button(butt::Y, true),
+                    // LeftStick => self.pad.set_button(butt::LeftTrigger, true),
+                    LeftShoulder => self.pad.set_button(butt::LeftShoulder, true),
+                    // RightStick => self.pad.set_button(butt::RightTrigger, true),
+                    RightShoulder => self.pad.set_button(butt::RightShoulder, true),
+                    Guide => self.pad.set_button(butt::Menu, true),
+                    Start => self.pad.set_button(butt::Start, true),
+                    Back => self.pad.set_button(butt::Select, true),
                     _ => {}
                 },
                 Event::ControllerButtonUp { button, .. } => match button {
-                    DPadUp => self.apad.set_button(butt::Up, false),
-                    DPadDown => self.apad.set_button(butt::Down, false),
-                    DPadLeft => self.apad.set_button(butt::Left, false),
-                    DPadRight => self.apad.set_button(butt::Right, false),
-                    South => self.apad.set_button(butt::A, false),
-                    East => self.apad.set_button(butt::B, false),
-                    West => self.apad.set_button(butt::X, false),
-                    North => self.apad.set_button(butt::Y, false),
-                    LeftStick => self.apad.set_button(butt::LeftTrigger, false),
-                    LeftShoulder => self.apad.set_button(butt::LeftShoulder, false),
-                    RightStick => self.apad.set_button(butt::RightTrigger, false),
-                    RightShoulder => self.apad.set_button(butt::RightShoulder, false),
-                    Guide => self.apad.set_button(butt::Menu, false),
-                    Start => self.apad.set_button(butt::Start, false),
-                    Back => self.apad.set_button(butt::Select, false),
+                    DPadUp => self.pad.set_button(butt::Up, false),
+                    DPadDown => self.pad.set_button(butt::Down, false),
+                    DPadLeft => self.pad.set_button(butt::Left, false),
+                    DPadRight => self.pad.set_button(butt::Right, false),
+                    South => self.pad.set_button(butt::A, false),
+                    East => self.pad.set_button(butt::B, false),
+                    West => self.pad.set_button(butt::X, false),
+                    North => self.pad.set_button(butt::Y, false),
+                    LeftStick => self.pad.set_button(butt::LeftTrigger, false),
+                    LeftShoulder => self.pad.set_button(butt::LeftShoulder, false),
+                    RightStick => self.pad.set_button(butt::RightTrigger, false),
+                    RightShoulder => self.pad.set_button(butt::RightShoulder, false),
+                    Guide => self.pad.set_button(butt::Menu, false),
+                    Start => self.pad.set_button(butt::Start, false),
+                    Back => self.pad.set_button(butt::Select, false),
                     _ => {}
                 },
                 Event::KeyDown {
@@ -442,21 +425,21 @@ impl App {
                 } => {
                     match keycode {
                         Option::None => {}
-                        Some(Keycode::Up) => self.apad.set_button(butt::Up, true),
-                        Some(Keycode::Down) => self.apad.set_button(butt::Down, true),
-                        Some(Keycode::Left) => self.apad.set_button(butt::Left, true),
-                        Some(Keycode::Right) => self.apad.set_button(butt::Right, true),
-                        Some(Keycode::X) => self.apad.set_button(butt::A, true),
-                        Some(Keycode::Z) => self.apad.set_button(butt::B, true),
-                        Some(Keycode::A) => self.apad.set_button(butt::Y, true),
-                        Some(Keycode::S) => self.apad.set_button(butt::X, true),
-                        Some(Keycode::_1) => self.apad.set_button(butt::LeftTrigger, true),
-                        Some(Keycode::Q) => self.apad.set_button(butt::LeftShoulder, true),
-                        Some(Keycode::_2) => self.apad.set_button(butt::RightTrigger, true),
-                        Some(Keycode::W) => self.apad.set_button(butt::RightShoulder, true),
-                        Some(Keycode::Tab) => self.apad.set_button(butt::Select, true),
-                        Some(Keycode::Return) => self.apad.set_button(butt::Start, true),
-                        Some(Keycode::Escape) => self.apad.set_button(butt::Menu, true),
+                        Some(Keycode::Up) => self.pad.set_button(butt::Up, true),
+                        Some(Keycode::Down) => self.pad.set_button(butt::Down, true),
+                        Some(Keycode::Left) => self.pad.set_button(butt::Left, true),
+                        Some(Keycode::Right) => self.pad.set_button(butt::Right, true),
+                        Some(Keycode::X) => self.pad.set_button(butt::A, true),
+                        Some(Keycode::Z) => self.pad.set_button(butt::B, true),
+                        Some(Keycode::A) => self.pad.set_button(butt::Y, true),
+                        Some(Keycode::S) => self.pad.set_button(butt::X, true),
+                        Some(Keycode::_1) => self.pad.set_button(butt::LeftTrigger, true),
+                        Some(Keycode::Q) => self.pad.set_button(butt::LeftShoulder, true),
+                        Some(Keycode::_2) => self.pad.set_button(butt::RightTrigger, true),
+                        Some(Keycode::W) => self.pad.set_button(butt::RightShoulder, true),
+                        Some(Keycode::Tab) => self.pad.set_button(butt::Select, true),
+                        Some(Keycode::Return) => self.pad.set_button(butt::Start, true),
+                        Some(Keycode::Escape) => self.pad.set_button(butt::Menu, true),
                         Some(Keycode::O) => {
                             if keymod == Mod::LCTRLMOD {
                                 self.display_overlay = !self.display_overlay
@@ -472,21 +455,21 @@ impl App {
                 } => {
                     match keycode {
                         Option::None => {}
-                        Some(Keycode::Up) => self.apad.set_button(butt::Up, false),
-                        Some(Keycode::Down) => self.apad.set_button(butt::Down, false),
-                        Some(Keycode::Left) => self.apad.set_button(butt::Left, false),
-                        Some(Keycode::Right) => self.apad.set_button(butt::Right, false),
-                        Some(Keycode::X) => self.apad.set_button(butt::A, false),
-                        Some(Keycode::Z) => self.apad.set_button(butt::B, false),
-                        Some(Keycode::A) => self.apad.set_button(butt::Y, false),
-                        Some(Keycode::S) => self.apad.set_button(butt::X, false),
-                        Some(Keycode::_1) => self.apad.set_button(butt::LeftTrigger, false),
-                        Some(Keycode::Q) => self.apad.set_button(butt::LeftShoulder, false),
-                        Some(Keycode::_2) => self.apad.set_button(butt::RightTrigger, false),
-                        Some(Keycode::W) => self.apad.set_button(butt::RightShoulder, false),
-                        Some(Keycode::Tab) => self.apad.set_button(butt::Select, false),
-                        Some(Keycode::Return) => self.apad.set_button(butt::Start, false),
-                        Some(Keycode::Escape) => self.apad.set_button(butt::Menu, false),
+                        Some(Keycode::Up) => self.pad.set_button(butt::Up, false),
+                        Some(Keycode::Down) => self.pad.set_button(butt::Down, false),
+                        Some(Keycode::Left) => self.pad.set_button(butt::Left, false),
+                        Some(Keycode::Right) => self.pad.set_button(butt::Right, false),
+                        Some(Keycode::X) => self.pad.set_button(butt::A, false),
+                        Some(Keycode::Z) => self.pad.set_button(butt::B, false),
+                        Some(Keycode::A) => self.pad.set_button(butt::Y, false),
+                        Some(Keycode::S) => self.pad.set_button(butt::X, false),
+                        Some(Keycode::_1) => self.pad.set_button(butt::LeftTrigger, false),
+                        Some(Keycode::Q) => self.pad.set_button(butt::LeftShoulder, false),
+                        Some(Keycode::_2) => self.pad.set_button(butt::RightTrigger, false),
+                        Some(Keycode::W) => self.pad.set_button(butt::RightShoulder, false),
+                        Some(Keycode::Tab) => self.pad.set_button(butt::Select, false),
+                        Some(Keycode::Return) => self.pad.set_button(butt::Start, false),
+                        Some(Keycode::Escape) => self.pad.set_button(butt::Menu, false),
                         Some(_) => {} // ignore the rest
                     }
                 }
@@ -505,7 +488,13 @@ impl App {
     where
         F: FnOnce(&mut [u8], usize) -> R,
     {
-        self.pixel_buffer.with_lock(None, func)?;
+        let Some(buffer) = &mut self.pixel_buffer else {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "Pixel buffer not initialized",
+            )));
+        };
+        buffer.with_lock(None, func)?;
         Ok(())
     }
 
@@ -536,8 +525,14 @@ impl App {
     /// Presents the current pixel buffer respecting the scaling strategy.
     pub fn pixel_buffer_present(&mut self) -> SdlResult<()> {
         let rect = self.get_scaled_rect().unwrap(); // TODO: Clean up unwrap
+        let Some(buffer) = &self.pixel_buffer else {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "Pixel buffer not initialized",
+            )));
+        };
         self.canvas
-            .copy_ex(&self.pixel_buffer, None, rect, 0.0, None, false, false)?;
+            .copy_ex(buffer, None, rect, 0.0, None, false, false)?;
         Ok(())
     }
 
@@ -546,8 +541,14 @@ impl App {
     /// draw pixel-by-pixel.
     pub fn render_target_present(&mut self) -> SdlResult<()> {
         let rect = self.get_scaled_rect().unwrap(); // TODO: Clean up unwrap
+        let Some(target) = &self.render_target else {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                "Render Target not initialized",
+            )));
+        };
         self.canvas
-            .copy_ex(&self.render_target, None, rect, 0.0, None, false, false)?;
+            .copy_ex(target, None, rect, 0.0, None, false, false)?;
         Ok(())
     }
 
@@ -590,22 +591,17 @@ impl App {
         match self.timing {
             // Optional FPS limiting
             Timing::VsyncLimitFPS(fps_limit) | Timing::ImmediateLimitFPS(fps_limit) => {
-                // let update_so_far = self.frame_start.elapsed().as_secs_f64();
-                // let target_time = (1.0 / fps_limit);// - 0.0001;
-                // let diff = target_time - update_so_far;
-                // if diff > 0.0 {
-                //     std::thread::sleep(Duration::from_secs_f64(diff));
-                // }
-
                 const LARGE_STEP: f64 = 1.0 / 1000.0; // 1ms
                 const SMALL_STEP: f64 = 1.0 / 10000.0; // 0.1ms
+
+                // Helps to ensure target_time ends just before vsync, but not too early
+                let target_time = match self.timing {
+                    Timing::VsyncLimitFPS(_) => (1.0 / fps_limit) - SMALL_STEP,
+                    _ => 1.0 / fps_limit,
+                };
+
+                // Sleep loop
                 let mut update_so_far = self.frame_start.elapsed().as_secs_f64();
-                let target_time = 1.0 / fps_limit;
-                // match self.timing {
-                //     // Helps to ensure target_time ends just before vsync
-                //     Timing::VsyncLimitFPS(_) => (1.0 / fps_limit) - 0.0001,
-                //     _ => 1.0 / fps_limit,
-                // };
                 while update_so_far < target_time {
                     update_so_far = self.frame_start.elapsed().as_secs_f64();
                     let diff = target_time - update_so_far;
@@ -635,10 +631,22 @@ impl App {
 
     // Audio
     /// Initiates playback of audio device.
-    pub fn audio_start(&mut self) -> SdlResult<()> {
+    pub fn audio_init(&mut self, sample_rate: u32) -> SdlResult<()> {
+        //Sound init
+        println!("----------------------- here ----------------------- ");
+        self.sample_rate = Some(sample_rate);
+        let spec = AudioSpec {
+            freq: Some(sample_rate as i32),
+            channels: Some(2),
+            format: Some(AudioFormat::s16_sys()),
+        };
+        let subsystem = self.context.audio()?;
+        let device = subsystem.open_playback_device(&spec)?;
+        let stream = device.open_device_stream(Some(&spec))?;
+        self.audio_stream = Some(stream);
+
         if let Some(audio) = &mut self.audio_stream {
             audio.resume()?;
-            // audio.resume();
         }
         Ok(())
     }
