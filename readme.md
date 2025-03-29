@@ -27,7 +27,6 @@ fn main() -> SdlResult<()> {
         240,
         Timing::VsyncLimitFPS(60.0),    // Frame Timing strategy.
         Scaling::PreserveAspect,        // Pixel buffer scaling strategy, ignored if you draw directly to canvas.
-        None                            // Audio sampling rate, if audio is desired.
     )?;
 
     app.init_pixel_buffer()?;

@@ -4,4 +4,4 @@
 
 [x] Make pixel buffer and render target optional, just like sound.
 
---->[ ] Mapping system to allow KeyCodes to be mapped to Game Controller inputs.
+--->[ ] Mapping system to allow any KeyCodes to be mapped to any Game Controller inputs.

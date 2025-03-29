@@ -71,6 +71,7 @@ pub struct App {
     /// (use 'pixel_buffer_update' for that) but can use regular SDL drawing functions via
     /// "canvas.with_texture_canvas".
     pub render_target: Option<Texture>,
+    /// A pixel buffer that you can manipule using "pixel_buffer_update()"
     pub pixel_buffer: Option<Texture>,
     /// The SDL TTF context
     #[cfg(feature = "ttf")]
@@ -128,7 +129,6 @@ impl App {
         timing: Timing,
         scaling: Scaling,
     ) -> SdlResult<App> {
-        // sdl3::hint::set("SDL_JOYSTICK_THREAD", "1");
         let context = sdl3::init()?;
 
         // Game controller
@@ -255,8 +255,25 @@ impl App {
         Ok(())
     }
 
-    /// Resizes the render target
-    pub fn set_size(&mut self, w: u32, h: u32) {}
+    // /// Resizes the render target. Causes a memory leak with SDL,
+    // /// at least with "unsafe_textures", so I'm leaving it disabled
+    // pub fn set_size(&mut self, w: u32, h: u32) -> SdlResult<()> {
+    //     if w == self.width && h == self.height {
+    //         return Ok(())
+    //     }
+    //     self.width = w;
+    //     self.height = h;
+
+    //     if self.pixel_buffer.is_some() {
+    //         self.init_pixel_buffer()?;
+    //     }
+
+    //     if self.render_target.is_some() {
+    //         self.init_render_target()?;
+    //     }
+
+    //     Ok(())
+    // }
 
     /// The window width, which is independent from the render target.
     pub fn window_width(&self) -> u32 {
@@ -340,12 +357,7 @@ impl App {
             use padstate::Button as butt;
             use sdl3::gamepad::Button::*;
             match event {
-                Event::ControllerAxisMotion {
-                    axis,
-                    timestamp: _,
-                    which: _,
-                    value,
-                } => {
+                Event::ControllerAxisMotion { axis, value, .. } => {
                     use sdl3::gamepad::Axis::*;
                     const AXIS_DEAD_ZONE: i16 = 8000;
                     match axis {
@@ -596,7 +608,7 @@ impl App {
 
                 // Helps to ensure target_time ends just before vsync, but not too early
                 let target_time = match self.timing {
-                    Timing::VsyncLimitFPS(_) => (1.0 / fps_limit) - SMALL_STEP,
+                    Timing::VsyncLimitFPS(_) => (1.0 / fps_limit) - (SMALL_STEP / 4.0),
                     _ => 1.0 / fps_limit,
                 };
 
