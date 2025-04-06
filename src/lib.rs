@@ -5,13 +5,14 @@ mod timing;
 
 use sdl3::audio::{AudioFormat, AudioSpec, AudioStreamOwner};
 use sdl3::gamepad::Gamepad;
+
 use sdl3::pixels::PixelFormat;
 use sdl3::sys::pixels::SDL_PixelFormat;
-use sdl3::AudioSubsystem;
+
 pub use smooth_buffer::SmoothBuffer;
 pub use smooth_buffer::{Float, Num};
 
-pub use padstate::{APad, Button};
+pub use padstate::*;
 pub use scaling::Scaling;
 
 pub use sdl3;
@@ -26,8 +27,8 @@ use sdl3::{
     event::Event,
     keyboard::{Keycode, Mod},
     rect::Rect,
-    render::{Canvas, Texture, TextureCreator},
-    video::{Window, WindowContext},
+    render::{Canvas, Texture},
+    video::Window,
     EventPump, Sdl,
 };
 use std::time::{Duration, Instant};
@@ -56,8 +57,8 @@ pub struct App {
     // SDL
     /// The internal SDL canvas. It is automatically cleared on every frame start.
     pub canvas: Canvas<Window>,
-    /// The internal SDL texture creator associated with the canvas.
-    pub texture_creator: TextureCreator<WindowContext>,
+    // /// The internal SDL texture creator associated with the canvas.
+    // pub texture_creator: TextureCreator<WindowContext>,
     /// The internal SDL context.
     pub context: Sdl,
     /// Cache for the event pump
@@ -129,22 +130,27 @@ impl App {
         timing: Timing,
         scaling: Scaling,
     ) -> SdlResult<App> {
+
+
+
         let context = sdl3::init()?;
 
-        // Game controller
+        // Input
         let gamepad_subsystem = context.gamepad()?;
-        let available = gamepad_subsystem.num_gamepads()?;
+        let available = gamepad_subsystem.gamepads()?.len() as u32;
         println!("MiniSDL: {} joysticks available", available);
+
+        let events = context.event_pump()?;
 
         // Iterate over all available joysticks and look for game controllers.
         let controller_1 = (0..available).find_map(|id| {
-            if !gamepad_subsystem.is_game_controller(id) {
-                println!("MiniSDL: {} is not a game controller", id);
-                return None;
-            }
+            // if !gamepad_subsystem.is_game_controller(id) {
+            //     println!("MiniSDL: {} is not a game controller", id);
+            //     return None;
+            // }
             match gamepad_subsystem.open(id) {
                 Ok(c) => {
-                    println!("MiniSDL: Opened joystick {} as \"{}\"", id, c.name());
+                    // println!("MiniSDL: Opened joystick {} as \"{}\"", id, c.name());
                     Some(c)
                 }
                 Err(e) => {
@@ -155,27 +161,20 @@ impl App {
         });
 
         // Video & Window
+        // sdl3::hint::set("SDL_RENDER_VSYNC", "1");
         let video_subsystem = context.video()?;
+
         let window = video_subsystem
             .window(name, width * 2, height * 2)
             .high_pixel_density()
             .position_centered()
             .resizable()
+            .opengl() // lowers CPU use, but may not work in the future?
             .build()?;
-        let canvas = match timing {
-            Timing::Vsync | Timing::VsyncLimitFPS(_) => window.into_canvas(),
-            Timing::Immediate | Timing::ImmediateLimitFPS(_) => window.into_canvas(),
-        };
-        let dpi_mult = 2.0; // TODO: Will need to check in SDL3
-                            // use sdl3::sys::SDL_WindowFlags::*;
-                            // let dpi_mult = if (canvas.window().window_flags() & WINDOW_ALLOW_HIGHDPI as u32) != 0 {
-                            //     2.0
-                            // } else {
-                            //     1.0
-                            // };
-        let texture_creator = canvas.texture_creator();
 
-        let events = context.event_pump()?;
+        let canvas = window.into_canvas();
+
+        let dpi_mult = canvas.window().pixel_density();
 
         Ok(Self {
             quit_requested: false,
@@ -203,7 +202,7 @@ impl App {
             controller_1,
             allow_analog_to_dpad_x: false,
             allow_analog_to_dpad_y: false,
-            texture_creator,
+            // texture_creator,
             // Audio
             sample_rate: None,
             audio_stream: None,
@@ -235,7 +234,12 @@ impl App {
 
     /// Initializes the Pixel Buffer with the current width and height settings.
     pub fn init_pixel_buffer(&mut self) -> SdlResult<()> {
-        let pixel_buffer = self.texture_creator.create_texture_streaming(
+        // let pixel_buffer = self.canvas.texture_creator().create_texture_streaming(
+        //     unsafe { PixelFormat::from_ll(SDL_PixelFormat::RGB24) },
+        //     self.width,
+        //     self.height,
+        // )?;
+        let pixel_buffer = self.canvas.create_texture_streaming(
             unsafe { PixelFormat::from_ll(SDL_PixelFormat::RGB24) },
             self.width,
             self.height,
@@ -246,7 +250,12 @@ impl App {
 
     /// Initializes the Render Target with the current width and height settings.
     pub fn init_render_target(&mut self) -> SdlResult<()> {
-        let render_target = self.texture_creator.create_texture_target(
+        // let render_target = self.canvas.texture_creator().create_texture_target(
+        //     unsafe { PixelFormat::from_ll(SDL_PixelFormat::RGB24) },
+        //     self.width,
+        //     self.height,
+        // )?;
+        let render_target = self.canvas.create_texture_target(
             unsafe { PixelFormat::from_ll(SDL_PixelFormat::RGB24) },
             self.width,
             self.height,
@@ -332,7 +341,7 @@ impl App {
             size,
             line_spacing,
             &self.fonts,
-            &mut self.texture_creator,
+            &mut self.canvas.texture_creator(),
         )
     }
 
@@ -608,7 +617,8 @@ impl App {
 
                 // Helps to ensure target_time ends just before vsync, but not too early
                 let target_time = match self.timing {
-                    Timing::VsyncLimitFPS(_) => (1.0 / fps_limit) - (SMALL_STEP / 4.0),
+                    // Timing::VsyncLimitFPS(_) => (1.0 / fps_limit) - SMALL_STEP,
+                    Timing::VsyncLimitFPS(_) => (1.0 / fps_limit) - LARGE_STEP,
                     _ => 1.0 / fps_limit,
                 };
 
@@ -638,6 +648,19 @@ impl App {
             }
         }
 
+        // match self.timing {
+        //     Timing::Vsync | Timing::VsyncLimitFPS(_) => {
+        //         self.canvas
+        //             .window()
+        //             .subsystem()
+        //             .gl_set_swap_interval(SwapInterval::VSync)?;
+        //     }
+        //     Timing::Immediate | Timing::ImmediateLimitFPS(_) => {
+        //         self.canvas.window().gl_swap_window();
+        //         // self.canvas.window().subsystem().gl_set_swap_interval(SwapInterval::Immediate)
+        //     }
+        // };
+
         Ok(())
     }
 
@@ -645,7 +668,6 @@ impl App {
     /// Initiates playback of audio device.
     pub fn audio_init(&mut self, sample_rate: u32) -> SdlResult<()> {
         //Sound init
-        println!("----------------------- here ----------------------- ");
         self.sample_rate = Some(sample_rate);
         let spec = AudioSpec {
             freq: Some(sample_rate as i32),

@@ -8,11 +8,12 @@ repository = "https://github.com/DoctorWhoof/mini_sdl.git"
 documentation = "https://docs.rs/mini_sdl/latest/mini_sdl/"
 
 [dependencies]
-padstate = "0.2.3"
+# padstate = "0.2.4"
+padstate = { path = "../padstate/" }
 smooth-buffer = "0.3.1"
 
 [dependencies.sdl3]
-version = "0.14.18"
+version = "0.14.21"
 default-features = false
 features = ["unsafe_textures"]
 

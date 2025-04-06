@@ -37,7 +37,7 @@ fn main() -> SdlResult<()> {
                 texture_canvas
                     .draw_line(point(310, 10), point(10, 230))
                     .unwrap();
-            });
+            })?;
         // Will present the render target with proper scaling on the canvas.
         // The overlay will still be drawn on top.
         app.render_target_present()?;

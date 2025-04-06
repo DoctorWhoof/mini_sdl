@@ -42,7 +42,7 @@ fn main() -> SdlResult<()> {
                 f2.draw("ABCDEFGHIJKLM", 20, 135, 1.0, target).ok();
                 f2.draw("NOPQRSTUVWXYZ", 20, 150, 1.0, target).ok();
                 f2.draw("!@#$%^&*()-_=+,.:;'~? ", 20, 165, 1.0, target).ok();
-            });
+            })?;
         // Present target to canvas, keep drawing directly on canvas.
         app.render_target_present()?;
         f1.color = Color::WHITE;
